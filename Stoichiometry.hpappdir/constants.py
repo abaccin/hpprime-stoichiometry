@@ -16,24 +16,8 @@ MENU_Y = const(220)
 MENU_H = const(20)
 CONTENT_H = const(220)
 
-# Colors (0xRRGGBB)
-COL_BG = 0xFFFFFF
-COL_TEXT = 0x000000
-COL_TITLE_BG = 0x2050A0
-COL_TITLE_FG = 0xFFFFFF
-COL_ACCENT = 0x2080D0
-COL_MENU_BG = 0x303030
-COL_MENU_FG = 0xFFFFFF
-COL_MENU_SEP = 0x606060
-COL_INPUT_BG = 0xF0F0F0
-COL_INPUT_BORDER = 0x808080
-COL_SUCCESS = 0x008000
-COL_ERROR = 0xD00000
-COL_ELEMENT = 0x0060C0
-COL_COEFF = 0xC00000
-COL_ARROW = 0x404040
-COL_GRAY = 0x808080
-COL_LIGHT_GRAY = 0xD0D0D0
+# Colors are managed by theme.py (supports light / dark mode).
+# Import and use: from theme import colors; then colors['bg'], colors['text'], etc.
 
 # Fonts
 FONT_SM = const(1)    # 10px

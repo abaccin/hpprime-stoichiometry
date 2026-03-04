@@ -7,9 +7,8 @@ Provides:
 
 import hpprime as hp
 from constants import (SCREEN_W, SCREEN_H, MENU_Y, GR_AFF,
-    COL_BG, COL_TEXT, COL_ACCENT, COL_GRAY, COL_LIGHT_GRAY,
-    COL_TITLE_BG, COL_TITLE_FG, COL_MENU_BG, COL_MENU_FG,
-    COL_MENU_SEP, FONT_SM, FONT_MD, FONT_TITLE)
+    FONT_SM, FONT_MD, FONT_TITLE)
+from theme import colors
 
 
 # --- PPL helpers ---
@@ -97,12 +96,12 @@ _FH = 22
 
 def _draw_title(title):
     hp.fillrect(GR_AFF, 0, 0, SCREEN_W, 24,
-                COL_TITLE_BG, COL_TITLE_BG)
-    _tout(GR_AFF, 8, 4, title, FONT_TITLE, COL_TITLE_FG)
+                colors['title_bg'], colors['title_bg'])
+    _tout(GR_AFF, 8, 4, title, FONT_TITLE, colors['title_fg'])
 
 
 def _draw_field(text, cursor):
-    hp.fillrect(GR_AFF, _FX, _FY, _FW, _FH, COL_GRAY, 0xFFFFFF)
+    hp.fillrect(GR_AFF, _FX, _FY, _FW, _FH, colors['gray'], colors['input_bg'])
     vis_w = _FW - 8
     start = 0
     if cursor > 0:
@@ -111,19 +110,19 @@ def _draw_field(text, cursor):
             start = max(0, cursor - vis_w // 7 + 5)
     show = text[start:]
     _tout(GR_AFF, _FX + 4, _FY + 4, show, FONT_MD,
-          COL_TEXT, vis_w)
+          colors['text'], vis_w)
     sb = text[start:cursor]
     cx = _FX + 4 + (_tw(sb, FONT_MD) if sb else 0)
     if _FX + 2 <= cx <= _FX + _FW - 2:
         hp.line(GR_AFF, cx, _FY + 3, cx, _FY + _FH - 3,
-                COL_ACCENT)
+                colors['accent'])
         hp.line(GR_AFF, cx + 1, _FY + 3, cx + 1,
-                _FY + _FH - 3, COL_ACCENT)
+                _FY + _FH - 3, colors['accent'])
 
 
 def _draw_menu_bar(labels):
     hp.fillrect(GR_AFF, 0, MENU_Y, SCREEN_W, 20,
-                COL_MENU_BG, COL_MENU_BG)
+                colors['menu_bg'], colors['menu_bg'])
     bw = SCREEN_W // 6
     for i in range(6):
         x = i * bw
@@ -131,10 +130,10 @@ def _draw_menu_bar(labels):
             tw = _tw(labels[i], FONT_SM)
             tx = x + (bw - tw) // 2
             _tout(GR_AFF, tx, MENU_Y + 5, labels[i],
-                  FONT_SM, COL_MENU_FG, bw)
+                  FONT_SM, colors['menu_fg'], bw)
         if i > 0:
             hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1,
-                    COL_MENU_SEP)
+                    colors['menu_sep'])
 
 
 def _menu_hit(tx, ty):
@@ -153,10 +152,10 @@ def _drain():
 def _cell_bg(col):
     """Color by column block: s-block, d-block, p-block."""
     if col <= 1:
-        return 0xFFE8E0   # warm (alkali/alkaline)
+        return colors['cell_warm']   # warm (alkali/alkaline)
     if col <= 11:
-        return 0xE0E8FF   # cool blue (transition)
-    return 0xE0F0E0       # green (p-block)
+        return colors['cell_cool']   # cool blue (transition)
+    return colors['cell_green']      # green (p-block)
 
 
 def _draw_pt():
@@ -165,32 +164,32 @@ def _draw_pt():
         y = _PY + row * _CH
         bg = _cell_bg(col)
         hp.fillrect(GR_AFF, x, y, _CW - 1, _CH - 1,
-                    COL_LIGHT_GRAY, bg)
+                    colors['light_gray'], bg)
         off = 5 if len(sym) == 1 else 1
         _tout(GR_AFF, x + off, y + 3, sym, FONT_SM,
-              COL_TEXT, _CW)
+              colors['text'], _CW)
 
 
 def _draw_sym_row():
     for i in range(5):
         x = i * _SW
         hp.fillrect(GR_AFF, x, _SY, _SW - 1, _SH - 1,
-                    COL_LIGHT_GRAY, 0xD8E8F8)
+                    colors['light_gray'], colors['cell_sym'])
         tw = _tw(_SYM_LBL[i], FONT_MD)
         tx = x + (_SW - tw) // 2
         _tout(GR_AFF, tx, _SY + 3, _SYM_LBL[i], FONT_MD,
-              COL_TEXT, _SW)
+              colors['text'], _SW)
 
 
 def _draw_num_row():
     for i in range(10):
         x = i * _NW
         hp.fillrect(GR_AFF, x, _NY, _NW - 1, _NH - 1,
-                    COL_LIGHT_GRAY, 0xF0F0E8)
+                    colors['light_gray'], colors['cell_num'])
         tw = _tw(str(i), FONT_MD)
         tx = x + (_NW - tw) // 2
         _tout(GR_AFF, tx, _NY + 3, str(i), FONT_MD,
-              COL_TEXT, _NW)
+              colors['text'], _NW)
 
 
 def _pt_hit(tx, ty):
@@ -248,7 +247,7 @@ def edit_equation(title='Equation', initial=''):
     text = initial if initial else ''
     cursor = len(text)
 
-    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, COL_BG, COL_BG)
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, colors['bg'], colors['bg'])
     _draw_title(title)
     _draw_field(text, cursor)
     _draw_pt()
@@ -391,21 +390,21 @@ def _draw_txt_kb(upper):
         col = i % _KCOLS
         x = _KX + col * _KW
         y = _KY + row * _KH
-        bg = 0xD8E8F8 if i >= 26 else 0xF0F0F0
+        bg = colors['key_special'] if i >= 26 else colors['key_bg']
         hp.fillrect(GR_AFF, x, y, _KW - 1, _KH - 1,
-                    COL_LIGHT_GRAY, bg)
+                    colors['light_gray'], bg)
         _tout(GR_AFF, x + 10, y + 6, ch, FONT_MD,
-              COL_TEXT, _KW)
+              colors['text'], _KW)
     for i in range(10):
         x = _KX + i * _KW
         hp.fillrect(GR_AFF, x, _KNY, _KW - 1, _KNH - 1,
-                    COL_LIGHT_GRAY, 0xF0F0E8)
+                    colors['light_gray'], colors['cell_num'])
         _tout(GR_AFF, x + 10, _KNY + 6, str(i), FONT_MD,
-              COL_TEXT, _KW)
+              colors['text'], _KW)
     hp.fillrect(GR_AFF, _KX, _KSY, SCREEN_W - 10, _KSH - 1,
-                COL_LIGHT_GRAY, 0xF0F0F0)
+                colors['light_gray'], colors['key_bg'])
     _tout(GR_AFF, 140, _KSY + 4, 'Space', FONT_MD,
-          COL_GRAY, 80)
+          colors['gray'], 80)
 
 
 def _txt_kb_hit(tx, ty, upper):
@@ -445,7 +444,7 @@ def edit_text(title='Edit', initial=''):
     cursor = len(text)
     upper = True
 
-    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, COL_BG, COL_BG)
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, colors['bg'], colors['bg'])
     _draw_title(title)
     _draw_field(text, cursor)
     _draw_txt_kb(upper)
