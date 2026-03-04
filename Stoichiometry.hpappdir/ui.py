@@ -6,12 +6,9 @@ and result display — all using hpprime graphics primitives.
 
 import hpprime as hp
 from constants import (SCREEN_W, SCREEN_H, MENU_Y, MENU_H,
-    GR_AFF, COL_BG, COL_TEXT, COL_TITLE_BG, COL_TITLE_FG,
-    COL_MENU_BG, COL_MENU_FG, COL_MENU_SEP, COL_ACCENT,
-    COL_INPUT_BG, COL_INPUT_BORDER, COL_SUCCESS, COL_ERROR,
-    COL_COEFF, COL_ELEMENT, COL_ARROW, COL_GRAY, COL_LIGHT_GRAY,
-    FONT_SM, FONT_MD, FONT_LG, FONT_XL, FONT_TITLE,
+    GR_AFF, FONT_SM, FONT_MD, FONT_LG, FONT_XL, FONT_TITLE,
     APP_NAME, APP_VERSION)
+from theme import colors
 
 
 # Target GROB for drawing (0=screen, 2=off-screen buffer)
@@ -52,13 +49,13 @@ def _textout(gr, x, y, text, font, color, width=320):
 
 def clear_screen():
     """Fill entire screen with background color."""
-    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, COL_BG, COL_BG)
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, colors['bg'], colors['bg'])
 
 
 def draw_title(text):
     """Draw title bar at top of screen."""
-    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, 24, COL_TITLE_BG, COL_TITLE_BG)
-    _textout(GR_AFF, 8, 4, text, FONT_TITLE, COL_TITLE_FG, SCREEN_W)
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, 24, colors['title_bg'], colors['title_bg'])
+    _textout(GR_AFF, 8, 4, text, FONT_TITLE, colors['title_fg'], SCREEN_W)
 
 
 def draw_menu(labels):
@@ -66,7 +63,7 @@ def draw_menu(labels):
 
     labels: list of up to 6 strings.
     """
-    hp.fillrect(GR_AFF, 0, MENU_Y, SCREEN_W, MENU_H, COL_MENU_BG, COL_MENU_BG)
+    hp.fillrect(GR_AFF, 0, MENU_Y, SCREEN_W, MENU_H, colors['menu_bg'], colors['menu_bg'])
     btn_w = SCREEN_W // 6
     for i in range(min(len(labels), 6)):
         x = i * btn_w
@@ -74,10 +71,10 @@ def draw_menu(labels):
             # Center text in button
             tw = _text_width(labels[i], FONT_SM)
             tx = x + (btn_w - tw) // 2
-            _textout(GR_AFF, tx, MENU_Y + 5, labels[i], FONT_SM, COL_MENU_FG, btn_w)
+            _textout(GR_AFF, tx, MENU_Y + 5, labels[i], FONT_SM, colors['menu_fg'], btn_w)
         # Draw separator line
         if i > 0:
-            hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1, COL_MENU_SEP)
+            hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1, colors['menu_sep'])
 
 
 def get_menu_tap(x, y):
@@ -87,13 +84,17 @@ def get_menu_tap(x, y):
     return min(x // (SCREEN_W // 6), 5)
 
 
-def draw_text(x, y, text, font=FONT_MD, color=COL_TEXT):
+def draw_text(x, y, text, font=FONT_MD, color=None):
     """Draw text string on target GROB."""
+    if color is None:
+        color = colors['text']
     _textout(_draw_target, x, y, text, font, color, SCREEN_W - x)
 
 
-def draw_text_centered(y, text, font=FONT_MD, color=COL_TEXT):
+def draw_text_centered(y, text, font=FONT_MD, color=None):
     """Draw text centered horizontally."""
+    if color is None:
+        color = colors['text']
     tw = _text_width(text, font)
     x = (SCREEN_W - tw) // 2
     _textout(_draw_target, x, y, text, font, color, SCREEN_W)
@@ -124,8 +125,10 @@ def draw_box(x, y, w, h, border_color, fill_color):
     hp.fillrect(GR_AFF, x, y, w, h, border_color, fill_color)
 
 
-def draw_separator(y, color=COL_LIGHT_GRAY):
+def draw_separator(y, color=None):
     """Draw horizontal separator line."""
+    if color is None:
+        color = colors['light_gray']
     hp.line(_draw_target, 5, y, SCREEN_W - 5, y, color)
 
 
@@ -158,7 +161,7 @@ def show_message(title, lines, wait=True):
     for line in lines:
         if y > MENU_Y - 16:
             break
-        draw_text(10, y, line, FONT_MD, COL_TEXT)
+        draw_text(10, y, line, FONT_MD, colors['text'])
         y += 16
 
     if wait:
@@ -228,25 +231,25 @@ def popup_menu(items, anchor_x=0):
     def _draw(sel):
         # Drop-shadow
         hp.fillrect(GR_AFF, px + 3, py + 3, popup_w, popup_h,
-                    0x999999, 0x999999)
+                    colors['popup_shadow'], colors['popup_shadow'])
         # Background + border
         hp.fillrect(GR_AFF, px, py, popup_w, popup_h,
-                    0x404040, 0xF8F8F8)
+                    colors['popup_border'], colors['popup_bg'])
         # Items
         for i, label in enumerate(items):
             iy = py + PAD_V + i * ITEM_H
             if i == sel:
                 hp.fillrect(GR_AFF, px + 1, iy, popup_w - 2, ITEM_H,
-                            COL_ACCENT, COL_ACCENT)
+                            colors['accent'], colors['accent'])
                 _textout(GR_AFF, px + PAD_X, iy + 4,
-                         label, FONT_LG, 0xFFFFFF, popup_w - PAD_X)
+                         label, FONT_LG, colors['sel_text'], popup_w - PAD_X)
             else:
                 # Subtle separator between items
                 if i > 0:
                     hp.line(GR_AFF, px + 4, iy, px + popup_w - 4, iy,
-                            0xDDDDDD)
+                            colors['popup_sep'])
                 _textout(GR_AFF, px + PAD_X, iy + 4,
-                         label, FONT_LG, COL_TEXT, popup_w - PAD_X)
+                         label, FONT_LG, colors['text'], popup_w - PAD_X)
 
     def _restore():
         hp.eval('BLIT_P(G0,' + str(px) + ',' + str(py) + ',' +
@@ -333,7 +336,7 @@ def draw_balanced_equation(result, start_y=30):
     y = start_y
 
     # Draw each side
-    draw_text(10, y, "Balanced Equation:", FONT_MD, COL_GRAY)
+    draw_text(10, y, "Balanced Equation:", FONT_MD, colors['gray'])
     y += 18
 
     # Build and draw LHS
@@ -367,10 +370,10 @@ def draw_balanced_equation(result, start_y=30):
         y += 16
     else:
         # Too wide even for small font — split LHS / RHS
-        y = draw_wrapped_text(10, y, lhs_str, FONT_MD, COL_TEXT, max_w, 16)
-        draw_text(20, y, "->", FONT_MD, COL_ARROW)
+        y = draw_wrapped_text(10, y, lhs_str, FONT_MD, colors['text'], max_w, 16)
+        draw_text(20, y, "->", FONT_MD, colors['arrow'])
         y += 16
-        y = draw_wrapped_text(10, y, rhs_str, FONT_MD, COL_TEXT, max_w, 16)
+        y = draw_wrapped_text(10, y, rhs_str, FONT_MD, colors['text'], max_w, 16)
 
     return y
 
@@ -381,29 +384,29 @@ def _draw_equation_colored(x, y, result, font):
     # LHS
     for i, (coeff, formula, _) in enumerate(result['lhs']):
         if i > 0:
-            draw_text(cx, y, ' + ', font, COL_TEXT)
+            draw_text(cx, y, ' + ', font, colors['text'])
             cx += _text_width(' + ', font)
         if coeff > 1:
             cs = str(coeff)
-            draw_text(cx, y, cs, font, COL_COEFF)
+            draw_text(cx, y, cs, font, colors['coeff'])
             cx += _text_width(cs, font)
-        draw_text(cx, y, formula, font, COL_ELEMENT)
+        draw_text(cx, y, formula, font, colors['element'])
         cx += _text_width(formula, font)
 
     # Arrow
-    draw_text(cx, y, ' -> ', font, COL_ARROW)
+    draw_text(cx, y, ' -> ', font, colors['arrow'])
     cx += _text_width(' -> ', font)
 
     # RHS
     for i, (coeff, formula, _) in enumerate(result['rhs']):
         if i > 0:
-            draw_text(cx, y, ' + ', font, COL_TEXT)
+            draw_text(cx, y, ' + ', font, colors['text'])
             cx += _text_width(' + ', font)
         if coeff > 1:
             cs = str(coeff)
-            draw_text(cx, y, cs, font, COL_COEFF)
+            draw_text(cx, y, cs, font, colors['coeff'])
             cx += _text_width(cs, font)
-        draw_text(cx, y, formula, font, COL_ELEMENT)
+        draw_text(cx, y, formula, font, colors['element'])
         cx += _text_width(formula, font)
 
 
@@ -419,14 +422,14 @@ def draw_element_table(result, start_y):
     draw_separator(y)
     y += 8
 
-    draw_text(10, y, "Verification:", FONT_MD, COL_GRAY)
+    draw_text(10, y, "Verification:", FONT_MD, colors['gray'])
     y += 16
 
     # Header
-    draw_text(10, y, "Element", FONT_SM, COL_GRAY)
-    draw_text(100, y, "LHS", FONT_SM, COL_GRAY)
-    draw_text(160, y, "RHS", FONT_SM, COL_GRAY)
-    draw_text(220, y, "OK?", FONT_SM, COL_GRAY)
+    draw_text(10, y, "Element", FONT_SM, colors['gray'])
+    draw_text(100, y, "LHS", FONT_SM, colors['gray'])
+    draw_text(160, y, "RHS", FONT_SM, colors['gray'])
+    draw_text(220, y, "OK?", FONT_SM, colors['gray'])
     y += 14
 
     draw_separator(y - 2)
@@ -436,10 +439,10 @@ def draw_element_table(result, start_y):
         rc = rhs_counts.get(el, 0)
         ok = lc == rc
 
-        draw_text(10, y, el, FONT_MD, COL_ELEMENT)
-        draw_text(100, y, str(lc), FONT_MD, COL_TEXT)
-        draw_text(160, y, str(rc), FONT_MD, COL_TEXT)
-        color = COL_SUCCESS if ok else COL_ERROR
+        draw_text(10, y, el, FONT_MD, colors['element'])
+        draw_text(100, y, str(lc), FONT_MD, colors['text'])
+        draw_text(160, y, str(rc), FONT_MD, colors['text'])
+        color = colors['success'] if ok else colors['error']
         draw_text(220, y, "Yes" if ok else "NO", FONT_MD, color)
         y += 14
 
@@ -447,7 +450,7 @@ def draw_element_table(result, start_y):
             break
 
     y += 4
-    status_color = COL_SUCCESS if is_ok else COL_ERROR
+    status_color = colors['success'] if is_ok else colors['error']
     status_text = "Balanced!" if is_ok else "NOT balanced"
     draw_text(10, y, status_text, FONT_MD, status_color)
     y += 16
@@ -468,28 +471,28 @@ def draw_molar_result(result, start_y=30):
     formula = result['formula']
     total = _fmt(result['total_mass'])
 
-    draw_text(10, y, formula, FONT_XL, COL_ELEMENT)
+    draw_text(10, y, formula, FONT_XL, colors['element'])
     tw = _text_width(formula, FONT_XL)
-    draw_text(10 + tw + 5, y, '= ' + total + ' g/mol', FONT_XL, COL_TEXT)
+    draw_text(10 + tw + 5, y, '= ' + total + ' g/mol', FONT_XL, colors['text'])
     y += 22
 
     draw_separator(y)
     y += 8
 
     # Breakdown table
-    draw_text(10, y, "Element", FONT_SM, COL_GRAY)
-    draw_text(80, y, "Count", FONT_SM, COL_GRAY)
-    draw_text(130, y, "Mass", FONT_SM, COL_GRAY)
-    draw_text(210, y, "Subtotal", FONT_SM, COL_GRAY)
+    draw_text(10, y, "Element", FONT_SM, colors['gray'])
+    draw_text(80, y, "Count", FONT_SM, colors['gray'])
+    draw_text(130, y, "Mass", FONT_SM, colors['gray'])
+    draw_text(210, y, "Subtotal", FONT_SM, colors['gray'])
     y += 14
 
     draw_separator(y - 2)
 
     for el, count, mass_each, mass_total in result['breakdown']:
-        draw_text(10, y, el, FONT_MD, COL_ELEMENT)
-        draw_text(80, y, str(count), FONT_MD, COL_TEXT)
-        draw_text(130, y, _fmt(mass_each), FONT_MD, COL_TEXT)
-        draw_text(210, y, _fmt(mass_total), FONT_MD, COL_TEXT)
+        draw_text(10, y, el, FONT_MD, colors['element'])
+        draw_text(80, y, str(count), FONT_MD, colors['text'])
+        draw_text(130, y, _fmt(mass_each), FONT_MD, colors['text'])
+        draw_text(210, y, _fmt(mass_total), FONT_MD, colors['text'])
         y += 14
 
         if y > MENU_Y - 20:
@@ -498,7 +501,7 @@ def draw_molar_result(result, start_y=30):
     y += 4
     draw_separator(y)
     y += 6
-    draw_text(10, y, "Total: " + total + " g/mol", FONT_LG, COL_SUCCESS)
+    draw_text(10, y, "Total: " + total + " g/mol", FONT_LG, colors['success'])
     y += 18
 
     return y
@@ -510,21 +513,21 @@ def draw_mass_percent(percents, start_y):
     percents: list from molar.mass_percent()
     """
     y = start_y
-    draw_text(10, y, "Mass Percent:", FONT_MD, COL_GRAY)
+    draw_text(10, y, "Mass Percent:", FONT_MD, colors['gray'])
     y += 16
 
     for el, count, pct, mass_total in percents:
         from molar import _fmt
         pct_str = _fmt(pct) + '%'
-        draw_text(10, y, el, FONT_MD, COL_ELEMENT)
-        draw_text(60, y, pct_str, FONT_MD, COL_TEXT)
+        draw_text(10, y, el, FONT_MD, colors['element'])
+        draw_text(60, y, pct_str, FONT_MD, colors['text'])
 
         # Draw bar
         bar_x = 130
         bar_w = int(pct * 1.5)  # scale: 100% = 150px
         if bar_w > 0:
             hp.fillrect(GR_AFF, bar_x, y + 2, bar_w, 10,
-                        COL_ACCENT, COL_ACCENT)
+                        colors['accent'], colors['accent'])
         y += 14
 
         if y > MENU_Y - 10:
