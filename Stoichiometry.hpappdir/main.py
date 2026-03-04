@@ -10,17 +10,23 @@ import theme
 from constants import (GR_AFF, SCREEN_W, MENU_Y,
     FONT_SM, FONT_MD, FONT_LG, FONT_TITLE)
 from theme import colors
-from keycodes import (KEY_ESC, KEY_F1, KEY_F2, KEY_F3,
-    KEY_F4, KEY_F5, KEY_F6, KEY_UP, KEY_DOWN,
+from keycodes import (KEY_ESC, KEY_UP, KEY_DOWN,
     KEY_ENTER, KEY_BACKSPACE)
 
-from ui import (clear_screen, draw_title, draw_menu, get_menu_tap,
+import ppl_guard
+from input_helpers import get_key, mouse_clear, get_touch, get_menu_tap
+
+from ui import (clear_screen, draw_title, draw_menu,
     set_draw_target,
     draw_balanced_equation, draw_element_table,
     draw_molar_result, draw_mass_percent,
     input_equation, input_formula,
     show_error, show_help, show_about, _textout, popup_menu)
 import storage
+from balancer import balance, verify_balance
+from parser import parse_equation
+from molar import molar_mass, mass_percent
+from editor import edit_equation, edit_text
 
 
 # --- Banner constants ---
@@ -101,7 +107,7 @@ _sort_dir = 1
 _view = []  # maps view position -> storage index
 _filter = ''  # substring filter; '' = no filter
 
-MAIN_MENU = ["Edit", "Star", "Mol", "About", "Theme", "Exit"]
+MAIN_MENU = ["\u270eEdit", "\u2605Star", "Mol", "About", "\u25d0", "Exit"]
 
 
 def _get_timestamp():
@@ -190,6 +196,10 @@ def _real(sel):
 
 def _draw_browser(equations, selected, scroll):
     """Draw the banner + equation browser list (double-buffered)."""
+    # Force HP Prime to switch from Numeric View (terminal) to graphical display.
+    # Any direct G0 draw activates the graphical view; fillrect over the full
+    # screen also acts as the clear, so the terminal content disappears.
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, MENU_Y, colors['bg'], colors['bg'])
     # Render to off-screen buffer G3, then BLIT to screen
     hp.dimgrob(3, SCREEN_W, MENU_Y, colors['bg'])
 
@@ -358,7 +368,6 @@ def _blit_result(scroll_y, total_h, max_scroll, menu):
 def show_result(eq_str, alias=''):
     """Balance and display an equation, with Save option if new."""
     try:
-        from balancer import balance, verify_balance
         result = balance(eq_str)
     except ValueError as e:
         show_error(str(e))
@@ -387,16 +396,18 @@ def show_result(eq_str, alias=''):
 
     max_scroll = max(0, total_h - _VIEW_H)
     scroll_y = 0
-    menu = ["New", "Mol", "", "", "", "Back"]
+    menu = ["+New", "Mol", "", "", "", "\u25c0Back"]
     if not is_saved:
-        menu[4] = "Save"
+        menu[4] = "\u2713Save"
 
     _blit_result(scroll_y, total_h, max_scroll, menu)
+    sr_down = False
+    sr_tx = -1
+    sr_ty = -1
 
     while True:
-        hp.eval('wait(0.1)')
-        key = hp.eval('GETKEY()')
-        if key == KEY_ESC or key == KEY_F6:
+        key = get_key()
+        if key == KEY_ESC:
             return
         if key == KEY_UP and scroll_y > 0:
             scroll_y = max(0, scroll_y - 20)
@@ -404,21 +415,16 @@ def show_result(eq_str, alias=''):
         elif key == KEY_DOWN and scroll_y < max_scroll:
             scroll_y = min(max_scroll, scroll_y + 20)
             _blit_result(scroll_y, total_h, max_scroll, menu)
-        elif key == KEY_F1:
-            eq = input_equation()
-            if eq:
-                show_result(eq)
-            return
-        elif key == KEY_F2:
-            _do_molar_for(eq_str)
-            return
-        elif key == KEY_F5 and not is_saved:
-            storage.add(eq_str, ts=_get_timestamp())
-            return
 
-        f1, f2 = hp.eval('mouse')
-        if len(f1) > 0 and f1[0] >= 0:
-            btn = get_menu_tap(f1[0], f1[1])
+        tx, ty = get_touch()
+        if tx >= 0:
+            if not sr_down:
+                sr_down = True
+                sr_tx = tx
+                sr_ty = ty
+        elif sr_down:
+            sr_down = False
+            btn = get_menu_tap(sr_tx, sr_ty)
             if btn == 0:
                 eq = input_equation()
                 if eq:
@@ -436,7 +442,6 @@ def show_result(eq_str, alias=''):
 
 def _do_molar_for(eq_str):
     """Show molar mass for compounds in an equation."""
-    from parser import parse_equation
     try:
         lhs, rhs = parse_equation(eq_str)
     except:
@@ -451,7 +456,7 @@ def _do_molar_for(eq_str):
     # Graphical compound picker
     sel = 0
     total = len(all_compounds)
-    pick_menu = ["", "", "", "", "", "Back"]
+    pick_menu = ["", "", "", "", "", "\u25c0Back"]
     _PICK_Y0 = 32
     _PICK_H = 22
     _PICK_MAX = (MENU_Y - _PICK_Y0) // _PICK_H
@@ -483,10 +488,13 @@ def _do_molar_for(eq_str):
 
     _draw_picker()
 
+    pick_down = False
+    pick_tx = -1
+    pick_ty = -1
+
     while True:
-        hp.eval('wait(0.1)')
-        key = hp.eval('GETKEY()')
-        if key == KEY_ESC or key == KEY_F6:
+        key = get_key()
+        if key == KEY_ESC:
             return
         if key == KEY_UP and sel > 0:
             sel -= 1
@@ -498,14 +506,19 @@ def _do_molar_for(eq_str):
             _show_molar(all_compounds[sel])
             return
 
-        f1, f2 = hp.eval('mouse')
-        if len(f1) > 0 and f1[0] >= 0:
-            tx, ty = f1[0], f1[1]
-            btn = get_menu_tap(tx, ty)
+        tx, ty = get_touch()
+        if tx >= 0:
+            if not pick_down:
+                pick_down = True
+                pick_tx = tx
+                pick_ty = ty
+        elif pick_down:
+            pick_down = False
+            btn = get_menu_tap(pick_tx, pick_ty)
             if btn == 5:
                 return
-            if _PICK_Y0 <= ty < _PICK_Y0 + total * _PICK_H:
-                idx = (ty - _PICK_Y0) // _PICK_H
+            if _PICK_Y0 <= pick_ty < _PICK_Y0 + total * _PICK_H:
+                idx = (pick_ty - _PICK_Y0) // _PICK_H
                 if idx < total:
                     if idx == sel:
                         _show_molar(all_compounds[sel])
@@ -518,7 +531,6 @@ def _do_molar_for(eq_str):
 def _show_molar(formula_str):
     """Display molar mass result screen."""
     try:
-        from molar import molar_mass
         result = molar_mass(formula_str)
     except ValueError as e:
         show_error(str(e))
@@ -531,23 +543,25 @@ def _show_molar(formula_str):
     draw_title("Molar Mass")
     y = draw_molar_result(result, 30)
 
-    draw_menu(["New", "Mass%", "", "", "", "Back"])
+    draw_menu(["+New", "Mass%", "", "", "", "\u25c0Back"])
+    sm_down = False
+    sm_tx = -1
+    sm_ty = -1
 
     while True:
-        hp.eval('wait(0.1)')
-        key = hp.eval('GETKEY()')
-        if key == KEY_ESC or key == KEY_F6:
-            return
-        if key == KEY_F1:
-            do_molar()
-            return
-        if key == KEY_F2:
-            _show_mass_pct(formula_str)
+        key = get_key()
+        if key == KEY_ESC:
             return
 
-        f1, f2 = hp.eval('mouse')
-        if len(f1) > 0 and f1[0] >= 0:
-            btn = get_menu_tap(f1[0], f1[1])
+        tx, ty = get_touch()
+        if tx >= 0:
+            if not sm_down:
+                sm_down = True
+                sm_tx = tx
+                sm_ty = ty
+        elif sm_down:
+            sm_down = False
+            btn = get_menu_tap(sm_tx, sm_ty)
             if btn == 0:
                 do_molar()
                 return
@@ -561,7 +575,6 @@ def _show_molar(formula_str):
 def _show_mass_pct(formula_str):
     """Display mass percent composition screen."""
     try:
-        from molar import mass_percent
         percents = mass_percent(formula_str)
     except ValueError as e:
         show_error(str(e))
@@ -571,24 +584,31 @@ def _show_mass_pct(formula_str):
     draw_title("Mass % - " + formula_str)
     y = draw_mass_percent(percents, 30)
 
-    draw_menu(["", "", "", "", "", "Back"])
+    draw_menu(["", "", "", "", "", "\u25c0Back"])
+    mp_down = False
+    mp_tx = -1
+    mp_ty = -1
 
     while True:
-        hp.eval('wait(0.1)')
-        key = hp.eval('GETKEY()')
-        if key == KEY_ESC or key == KEY_F6:
+        key = get_key()
+        if key == KEY_ESC:
             return
 
-        f1, f2 = hp.eval('mouse')
-        if len(f1) > 0 and f1[0] >= 0:
-            btn = get_menu_tap(f1[0], f1[1])
+        tx, ty = get_touch()
+        if tx >= 0:
+            if not mp_down:
+                mp_down = True
+                mp_tx = tx
+                mp_ty = ty
+        elif mp_down:
+            mp_down = False
+            btn = get_menu_tap(mp_tx, mp_ty)
             if btn == 5:
                 return
 
 
 def _input_alias(current=''):
     """Prompt for alias using custom editor."""
-    from editor import edit_text
     title = 'Edit Alias' if current else 'Alias'
     result = edit_text(title, current)
     if result is None:
@@ -646,7 +666,6 @@ def _do_edit_menu(equations, selected, scroll):
             scroll = _ensure_visible(selected, scroll)
     elif choice == 3:
         # Set / update filter
-        from editor import edit_text
         new_f = edit_text('Filter', _filter)
         if new_f is not None:
             _filter = new_f.strip()
@@ -662,33 +681,33 @@ def _do_edit_menu(equations, selected, scroll):
 
 def main():
     """Main application loop — banner + equation browser."""
+    ppl_guard.init()
     theme.init()
     _load_banner()
     equations = storage.load()
     selected = 0
     scroll = 0
-    touch_selected = False
+    touch_down = False
+    tap_x = -1
+    tap_y = -1
 
     _draw_browser(equations, selected, scroll)
 
     while True:
-        hp.eval('wait(0.1)')
-        key = hp.eval('GETKEY()')
+        key = get_key()
 
-        if key == KEY_ESC or key == KEY_F6:
+        if key == KEY_ESC:
             break
 
         elif key == KEY_UP:
             if selected > 0:
                 selected -= 1
-                touch_selected = False
                 scroll = _ensure_visible(selected, scroll)
                 _draw_browser(equations, selected, scroll)
 
         elif key == KEY_DOWN:
             if _view and selected < len(_view) - 1:
                 selected += 1
-                touch_selected = False
                 scroll = _ensure_visible(selected, scroll)
                 _draw_browser(equations, selected, scroll)
 
@@ -698,38 +717,12 @@ def main():
                 entry = equations[ri]
                 al = entry[2] if len(entry) > 2 else ''
                 show_result(entry[1], al)
+                mouse_clear()
                 equations = storage.load()
                 if selected >= len(_view):
                     selected = max(0, len(_view) - 1)
-                touch_selected = False
                 scroll = _ensure_visible(selected, scroll)
                 _draw_browser(equations, selected, scroll)
-
-        elif key == KEY_F1:
-            # Edit submenu (Add / Edit / Delete)
-            equations, selected, scroll = _do_edit_menu(
-                equations, selected, scroll)
-            _draw_browser(equations, selected, scroll)
-
-        elif key == KEY_F2:
-            # Star/unstar
-            if equations:
-                equations = storage.toggle_star(
-                    _real(selected), _get_timestamp())
-            _draw_browser(equations, selected, scroll)
-
-        elif key == KEY_F3:
-            # Molar
-            do_molar()
-            _draw_browser(equations, selected, scroll)
-
-        elif key == KEY_F4:
-            show_about()
-            _draw_browser(equations, selected, scroll)
-
-        elif key == KEY_F5:
-            theme.toggle()
-            _draw_browser(equations, selected, scroll)
 
         elif key == KEY_BACKSPACE:
             # Quick delete
@@ -740,83 +733,80 @@ def main():
                 scroll = _ensure_visible(selected, scroll)
                 _draw_browser(equations, selected, scroll)
 
-        # Touch handling
-        f1, f2 = hp.eval('mouse')
-        if len(f1) > 0 and f1[0] >= 0:
-            tx, ty = f1[0], f1[1]
-            evt = f1[4] if len(f1) > 4 else 3
-
-            # long-press (4) never triggers anything
-            btn = get_menu_tap(tx, ty) if evt != 4 else -1
+        # Touch handling — press/release state machine
+        # Actions fire on release only (except scrollbar drag).
+        tx, ty = get_touch()
+        if tx >= 0:
+            if not touch_down:
+                touch_down = True
+                tap_x = tx
+                tap_y = ty
+            # Live scrollbar drag while finger is held
+            if tap_x >= SCREEN_W - 14 and _ITEM_Y0 <= ty < _FOOTER_Y - 3 and len(_view) > _MAX_VISIBLE:
+                sb_area_h = _FOOTER_Y - 3 - _ITEM_Y0
+                ratio = (ty - _ITEM_Y0) / max(1, sb_area_h)
+                max_scroll = len(_view) - _MAX_VISIBLE
+                scroll = int(ratio * max_scroll)
+                scroll = max(0, min(scroll, max_scroll))
+                selected = max(scroll, min(selected, scroll + _MAX_VISIBLE - 1))
+                _draw_browser(equations, selected, scroll)
+        elif touch_down:
+            # Finger released — process tap at (tap_x, tap_y)
+            touch_down = False
+            btn = get_menu_tap(tap_x, tap_y)
             if btn == 0:
-                # Edit submenu (Add / Edit / Delete)
                 equations, selected, scroll = _do_edit_menu(
                     equations, selected, scroll)
+                mouse_clear()
                 _draw_browser(equations, selected, scroll)
             elif btn == 1:
-                # Star/unstar
                 if equations:
                     equations = storage.toggle_star(
                         _real(selected), _get_timestamp())
                 _draw_browser(equations, selected, scroll)
             elif btn == 2:
-                # Molar
                 do_molar()
+                mouse_clear()
                 _draw_browser(equations, selected, scroll)
             elif btn == 3:
                 show_about()
+                mouse_clear()
                 _draw_browser(equations, selected, scroll)
             elif btn == 4:
                 theme.toggle()
                 _draw_browser(equations, selected, scroll)
             elif btn == 5:
                 break
-            else:
-                # Header tap — sort (any event except long-press)
-                if evt != 4 and _HEADER_Y <= ty < _ITEM_Y0 and equations:
-                    col = _header_tap(tx)
-                    if col >= 0:
-                        _toggle_sort(col)
-                        selected = 0
-                        scroll = 0
-                        _draw_browser(equations, selected, scroll)
-                # Scrollbar — responds to any touch for smooth drag
-                elif tx >= SCREEN_W - 14 and _ITEM_Y0 <= ty < _FOOTER_Y - 3 and len(_view) > _MAX_VISIBLE:
-                    # Scroll to position based on touch Y
-                    sb_area_h = _FOOTER_Y - 3 - _ITEM_Y0
-                    ratio = (ty - _ITEM_Y0) / max(1, sb_area_h)
-                    max_scroll = len(_view) - _MAX_VISIBLE
-                    scroll = int(ratio * max_scroll)
-                    scroll = max(0, min(scroll, max_scroll))
-                    selected = max(scroll, min(selected, scroll + _MAX_VISIBLE - 1))
+            elif _HEADER_Y <= tap_y < _ITEM_Y0 and equations:
+                col = _header_tap(tap_x)
+                if col >= 0:
+                    _toggle_sort(col)
+                    selected = 0
+                    scroll = 0
                     _draw_browser(equations, selected, scroll)
-                # Row tap — any event except long-press
-                # press(1) can select; only release/click (not press) can open
-                elif evt != 4:
-                    idx = _row_from_y(ty, scroll, len(_view))
-                    if idx >= 0:
-                        if idx != selected:
-                            # Tap on a different row: select it
-                            selected = idx
-                            touch_selected = True
-                            _draw_browser(equations, selected, scroll)
-                        elif touch_selected and evt != 1:
-                            # Release/click on already-selected row: open
-                            ri = _real(selected)
-                            entry = equations[ri]
-                            al = entry[2] if len(entry) > 2 else ''
-                            show_result(entry[1], al)
-                            equations = storage.load()
-                            if selected >= len(_view):
-                                selected = max(0, len(_view) - 1)
-                            touch_selected = False
-                            scroll = _ensure_visible(selected, scroll)
-                            _draw_browser(equations, selected, scroll)
+            elif tap_x < SCREEN_W - 14:
+                # Row tap (not in scrollbar area)
+                idx = _row_from_y(tap_y, scroll, len(_view))
+                if idx >= 0:
+                    if idx != selected:
+                        selected = idx
+                        _draw_browser(equations, selected, scroll)
+                    else:
+                        # Tap on already-selected row — open it
+                        ri = _real(selected)
+                        entry = equations[ri]
+                        al = entry[2] if len(entry) > 2 else ''
+                        show_result(entry[1], al)
+                        mouse_clear()
+                        equations = storage.load()
+                        if selected >= len(_view):
+                            selected = max(0, len(_view) - 1)
+                        scroll = _ensure_visible(selected, scroll)
+                        _draw_browser(equations, selected, scroll)
 
         gc.collect()
 
-    # Clear the Python terminal output so it doesn't show on exit
-    hp.eval('print')
+    ppl_guard.cleanup()
 
 
 # Entry point
