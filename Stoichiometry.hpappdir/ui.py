@@ -59,22 +59,29 @@ def draw_title(text):
 
 
 def draw_menu(labels):
-    """Draw 6-button soft menu bar at bottom.
+    """Draw 6-button soft menu bar at bottom (native HP Prime style).
 
     labels: list of up to 6 strings.
     """
-    hp.fillrect(GR_AFF, 0, MENU_Y, SCREEN_W, MENU_H, colors['menu_bg'], colors['menu_bg'])
     btn_w = SCREEN_W // 6
+    bg = colors['menu_bg']
+    hi = colors['menu_hi']
+    sep = colors['menu_sep']
+    fg = colors['menu_fg']
+    y0 = MENU_Y
+    y1 = SCREEN_H - 1
+    hp.fillrect(GR_AFF, 0, y0, SCREEN_W, MENU_H, bg, bg)
     for i in range(min(len(labels), 6)):
         x = i * btn_w
+        # Top highlight for 3D raised look
+        hp.line(GR_AFF, x + 1, y0, x + btn_w - 2, y0, hi)
+        # Separator between buttons
+        if i > 0:
+            hp.line(GR_AFF, x, y0, x, y1, sep)
         if labels[i]:
-            # Center text in button
             tw = _text_width(labels[i], FONT_SM)
             tx = x + (btn_w - tw) // 2
-            _textout(GR_AFF, tx, MENU_Y + 5, labels[i], FONT_SM, colors['menu_fg'], btn_w)
-        # Draw separator line
-        if i > 0:
-            hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1, colors['menu_sep'])
+            _textout(GR_AFF, tx, y0 + 5, labels[i], FONT_SM, fg, btn_w)
 
 
 def get_menu_tap(x, y):
@@ -165,7 +172,7 @@ def show_message(title, lines, wait=True):
         y += 16
 
     if wait:
-        draw_menu(["", "", "", "", "", "OK"])
+        draw_menu(["", "", "", "", "", "\u2713OK"])
         _wait_for_input()
 
 
@@ -258,6 +265,7 @@ def popup_menu(items, anchor_x=0):
 
     sel = 0
     _draw(sel)
+    while hp.eval('mouse(1)') >= 0: pass  # drain stale tap events
 
     while True:
         hp.eval('wait(0.05)')
