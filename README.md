@@ -24,14 +24,17 @@ https://github.com/user-attachments/assets/8834f168-dbae-47d4-8596-16ad56265e7f
 | Screen | Access | Description |
 |---|---|---|
 | Browser | App start | List of saved equations. Tap or press Enter to balance. |
-| Balance result | Enter on selected eq / F1 Add | Balanced equation + verification table. |
-| Molar mass | F3 (Mol) from browser or result | Breakdown table for a formula. |
-| Mass percent | F2 (Mass%) from molar screen | Per-element % with bar chart. |
-| About | (from Help menu) | Version and algorithm info. |
+| Balance result | Enter on selected eq / Edit → Add | Balanced equation + verification table. |
+| Molar mass | Mol button from browser or result | Breakdown table for a formula. |
+| Mass percent | Mass% button from molar screen | Per-element % with bar chart. |
+| About | About button | Version and algorithm info. |
 
 ---
 
 ## Controls
+
+The soft menu bar at the bottom of each screen is **touch-only** (tap the button).
+The physical keyboard handles navigation and common shortcuts.
 
 ### Browser (main screen)
 
@@ -39,11 +42,13 @@ https://github.com/user-attachments/assets/8834f168-dbae-47d4-8596-16ad56265e7f
 |---|---|
 | ↑ / ↓ | Move selection |
 | Enter | Balance selected equation |
-| F1 (Edit) | Submenu: Add / Edit / Delete / Filter |
-| F2 (Star) | Toggle star on selected equation |
-| F3 (Mol) | Open molar mass calculator |
 | Backspace | Delete selected equation |
-| F6 (Exit) / ESC | Exit app |
+| ESC | Exit app |
+| Tap **Edit** | Submenu: Add / Edit / Delete / Filter |
+| Tap **Star** | Toggle star on selected equation |
+| Tap **Mol** | Open molar mass calculator |
+| Tap **Theme** (◐) | Toggle light / dark theme |
+| Tap **Exit** | Exit app |
 | Tap column header | Sort by that column (tap again to reverse) |
 | Tap row | Select; tap again to open |
 | Drag scrollbar | Scroll list |
@@ -53,18 +58,20 @@ https://github.com/user-attachments/assets/8834f168-dbae-47d4-8596-16ad56265e7f
 | Key / Touch | Action |
 |---|---|
 | ↑ / ↓ | Scroll result |
-| F1 (New) | Enter a new equation to balance |
-| F2 (Mol) | Open molar mass for a compound from the equation |
-| F5 (Save) | Save equation to browser (only shown if not already saved) |
-| F6 (Back) / ESC | Return to browser |
+| ESC | Return to browser |
+| Tap **New** | Enter a new equation to balance |
+| Tap **Mol** | Open molar mass for a compound from the equation |
+| Tap **Save** | Save equation to browser (only shown if not already saved) |
+| Tap **Back** | Return to browser |
 
 ### Molar mass screen
 
 | Key / Touch | Action |
 |---|---|
-| F1 (New) | Enter a new formula |
-| F2 (Mass%) | Show mass percent breakdown |
-| F6 (Back) / ESC | Return |
+| ESC | Return |
+| Tap **New** | Enter a new formula |
+| Tap **Mass%** | Show mass percent breakdown |
+| Tap **Back** | Return |
 
 ---
 
@@ -126,8 +133,12 @@ The HP Prime implementation uses the built-in `linalg` module in place of NumPy/
 | `ui.py` | Drawing helpers, menus, input dialogs |
 | `editor.py` | On-screen text editor widget |
 | `elements.py` | Atomic mass table |
-| `constants.py` | Colors, fonts, screen dimensions |
-| `keycodes.py` | HP Prime key code constants |
+| `constants.py` | Screen dimensions, fonts, GROB constants |
+| `keycodes.py` | HP Prime keyboard bitmask bit positions |
+| `theme.py` | Light / dark color palettes |
+| `icons.py` | Menu bar bitmap icons (9×9 pixel art) |
+| `input_helpers.py` | Keyboard edge-detect, touch helpers, DAS repeat |
+| `ppl_guard.py` | PPL environment save / restore on app entry / exit |
 
 ---
 
