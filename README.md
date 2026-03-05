@@ -16,6 +16,8 @@
 - **Persistent storage** — equations are saved to the app's data file and survive restarts.
 
 ---
+## Demo
+https://github.com/user-attachments/assets/8834f168-dbae-47d4-8596-16ad56265e7f
 
 ## Screens
 
