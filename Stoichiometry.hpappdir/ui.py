@@ -237,12 +237,14 @@ def _wait_for_input():
             return -1
 
 
-def popup_menu(items, anchor_x=0):
+def popup_menu(items, anchor_x=0, item_colors=None):
     """Draw a custom popup menu above the given button x position.
 
-    items:    list of label strings.
-    anchor_x: left edge (px) of the triggering button.
-    Returns:  0-based index of chosen item, or -1 if cancelled.
+    items:       list of label strings.
+    anchor_x:    left edge (px) of the triggering button.
+    item_colors: optional list of 0xRRGGBB ints (same length as items).
+                 Non-zero entries get a colored dot drawn left of the label.
+    Returns:     0-based index of chosen item, or -1 if cancelled.
     """
     _KEY_UP    = 2
     _KEY_DOWN  = 12
@@ -254,11 +256,15 @@ def popup_menu(items, anchor_x=0):
     PAD_V  = 4        # vertical padding inside box
 
     # Measure popup width from widest item
+    if item_colors is None:
+        item_colors = []
+    has_dots = len(item_colors) > 0
+    dot_pad = 14 if has_dots else 0  # space for color dot
     max_w = 90
     for label in items:
         w = _text_width(label, FONT_LG)
-        if w + PAD_X * 2 > max_w:
-            max_w = w + PAD_X * 2
+        if w + PAD_X * 2 + dot_pad > max_w:
+            max_w = w + PAD_X * 2 + dot_pad
 
     popup_w = max_w
     popup_h = PAD_V + len(items) * ITEM_H + PAD_V
@@ -289,18 +295,28 @@ def popup_menu(items, anchor_x=0):
         # Items
         for i, label in enumerate(items):
             iy = py + PAD_V + i * ITEM_H
+            tx = px + PAD_X + dot_pad
+            tw = popup_w - PAD_X - dot_pad
             if i == sel:
                 hp.fillrect(GR_AFF, px + 1, iy, popup_w - 2, ITEM_H,
                             colors['accent'], colors['accent'])
-                _textout(GR_AFF, px + PAD_X, iy + 4,
-                         label, FONT_LG, colors['sel_text'], popup_w - PAD_X)
+                if has_dots and i < len(item_colors) and item_colors[i]:
+                    c = item_colors[i]
+                    hp.fillrect(GR_AFF, px + PAD_X, iy + 5,
+                                10, ITEM_H - 10, c, c)
+                _textout(GR_AFF, tx, iy + 4,
+                         label, FONT_LG, colors['sel_text'], tw)
             else:
                 # Subtle separator between items
                 if i > 0:
                     hp.line(GR_AFF, px + 4, iy, px + popup_w - 4, iy,
                             colors['popup_sep'])
-                _textout(GR_AFF, px + PAD_X, iy + 4,
-                         label, FONT_LG, colors['text'], popup_w - PAD_X)
+                if has_dots and i < len(item_colors) and item_colors[i]:
+                    c = item_colors[i]
+                    hp.fillrect(GR_AFF, px + PAD_X, iy + 5,
+                                10, ITEM_H - 10, c, c)
+                _textout(GR_AFF, tx, iy + 4,
+                         label, FONT_LG, colors['text'], tw)
 
     def _restore():
         hp.eval('BLIT_P(G0,' + str(px) + ',' + str(py) + ',' +
@@ -351,21 +367,27 @@ def popup_menu(items, anchor_x=0):
                         return sel
 
 
-def input_equation(initial=''):
+def input_equation(initial='', category='', cat_names=None, cat_colors=None):
     """Prompt for chemical equation using periodic table editor.
 
-    initial: pre-fill value (for editing).
-    Returns equation string, or None if cancelled/empty.
+    initial:    pre-fill equation (for editing).
+    category:   current category name.
+    cat_names:  list of category names for the picker.
+    cat_colors: list of 0xRRGGBB colors matching cat_names.
+    Returns (equation, category) tuple, or (None, category) if cancelled.
     """
     from editor import edit_equation
     title = 'Edit Equation' if initial else 'New Equation'
-    result = edit_equation(title, initial)
+    result = edit_equation(title, initial, category, cat_names, cat_colors)
     if result is None:
-        return initial if initial else None
-    result = result.strip()
-    if not result:
-        return initial if initial else None
-    return result
+        eq = initial if initial else None
+        return (eq, category)
+    text, cat = result
+    text = text.strip() if text else ''
+    if not text:
+        eq = initial if initial else None
+        return (eq, category)
+    return (text, cat)
 
 
 def input_formula():
@@ -375,9 +397,13 @@ def input_formula():
     """
     from editor import edit_equation
     result = edit_equation('Molar Mass', '')
-    if result is None or not result.strip():
+    if result is None:
         return None
-    return result.strip()
+    text, _cat = result
+    text = text.strip() if text else ''
+    if not text:
+        return None
+    return text
 
 
 def draw_balanced_equation(result, start_y=30):

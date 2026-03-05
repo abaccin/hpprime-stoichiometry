@@ -100,15 +100,39 @@ _MAX_VISIBLE = (_FOOTER_Y - _ITEM_Y0) // _ITEM_H
 # Column positions
 _COL0_X = 12     # divider after star column
 _COL1_X = 33     # divider after star/# area
-_COL2_X = 235    # divider before date column
-_DATE_X = 238    # date text start x
+_CAT_X = 286     # category tag column start
+_CAT_W = 26      # category tag width (1px gap before scrollbar)
 
-# Sort state: 0=# 1=star 2=equation 3=date, direction 1=asc -1=desc
+# Category detection: (alias_prefix, 2-char tag, theme color key, symbol)
+_CATEGORIES = (
+    ('Combustion', 'Co', 'cat_combustion', '~'),
+    ('Synthesis', 'Sy', 'cat_synthesis', '+'),
+    ('Double Replacement', 'DR', 'cat_double_rep', '<>'),
+    ('Single Replacement', 'SR', 'cat_single_rep', '>'),
+    ('Neutralization', 'Ne', 'cat_neutral', '='),
+    ('Redox', 'Rx', 'cat_redox', '*'),
+    ('Decomposition', 'Dc', 'cat_decomp', '/'),
+)
+
+
+def _detect_cat(alias):
+    """Detect category from alias prefix. Returns (tag, color_key) or None."""
+    if not alias:
+        return None
+    al = alias
+    for prefix, tag, ckey, sym in _CATEGORIES:
+        if al.startswith(prefix):
+            return (tag, ckey, sym)
+    return None
+
+
+# Sort state: 0=# 1=star 2=equation 3=category, direction 1=asc -1=desc
 _sort_col = 0
 _sort_dir = 1
 _view = []  # maps view position -> storage index
 _view_dirty = True  # True = _view needs recalculation
 _filter = ''  # substring filter; '' = no filter
+_STAR_FILTER = '\u2605'  # sentinel value for starred-only filter
 
 MAIN_MENU = [("Edit", ICON_EDIT), ("Star", ICON_STAR), ("Mol", ICON_MOL),
              ("About", ICON_ABOUT), ("", ICON_THEME), ("Exit", ICON_EXIT)]
@@ -142,9 +166,10 @@ def _sort_key(item):
     elif _sort_col == 2:
         alias = entry[2] if len(entry) > 2 else ''
         return (alias if alias else entry[1]).lower()
-    else:  # date
-        ts = entry[3] if len(entry) > 3 else ''
-        return ts if ts else ''
+    else:  # category
+        alias = entry[2] if len(entry) > 2 else ''
+        cat = _detect_cat(alias)
+        return cat[0] if cat else 'zz'
 
 
 def _sorted_indices(equations):
@@ -154,12 +179,24 @@ def _sorted_indices(equations):
         return _view
     items = list(enumerate(equations))
     if _filter:
-        flt = _filter.lower()
-        def _m(e):
-            txt = e[1].lower()
-            al = e[2].lower() if len(e) > 2 and e[2] else ''
-            return flt in txt or flt in al
-        items = [(i, e) for i, e in items if _m(e)]
+        if _filter == _STAR_FILTER:
+            items = [(i, e) for i, e in items if e[0]]
+        else:
+            flt = _filter.lower()
+            # Check if filter matches a category prefix
+            cat_match = None
+            for prefix, tag, ckey, sym in _CATEGORIES:
+                if prefix.lower() == flt or tag.lower() == flt:
+                    cat_match = prefix
+                    break
+            def _m(e):
+                al = e[2] if len(e) > 2 and e[2] else ''
+                if cat_match:
+                    return al.startswith(cat_match)
+                txt = e[1].lower()
+                al_l = al.lower()
+                return flt in txt or flt in al_l
+            items = [(i, e) for i, e in items if _m(e)]
     rev = (_sort_dir == -1)
     if _sort_col == 1:
         rev = not rev  # starred=0 should come first in 'asc'
@@ -178,10 +215,10 @@ def _header_tap(tx):
         return 1   # star column
     elif tx < _COL1_X:
         return 0   # # column
-    elif tx < _COL2_X:
+    elif tx < _CAT_X:
         return 2   # equation column
     else:
-        return 3   # date column
+        return 3   # category column
 
 
 def _toggle_sort(col):
@@ -257,11 +294,11 @@ def _draw_browser(equations, selected, scroll, scroll_only=False):
         filter_tag = ' [F]' if _filter else ''
         eq_lbl = 'Equation' + filter_tag + (arrow if _sort_col == 2 else '')
         eq_col = colors['filter_active'] if _filter else (colors['accent'] if _sort_col == 2 else colors['gray'])
-        dt_lbl = 'Modified' + (arrow if _sort_col == 3 else '')
-        dt_col = colors['accent'] if _sort_col == 3 else colors['gray']
+        cat_lbl = 'Cat' + (arrow if _sort_col == 3 else '')
+        cat_col = colors['accent'] if _sort_col == 3 else colors['gray']
         _textout(3, 3, _HEADER_Y + 2, star_lbl, FONT_SM, star_col, 10)
-        _textout(3, 14, _HEADER_Y + 2, eq_lbl, FONT_SM, eq_col, 200)
-        _textout(3, _DATE_X, _HEADER_Y + 2, dt_lbl, FONT_SM, dt_col, 82)
+        _textout(3, 14, _HEADER_Y + 2, eq_lbl, FONT_SM, eq_col, 260)
+        _textout(3, _CAT_X, _HEADER_Y + 2, cat_lbl, FONT_SM, cat_col, _CAT_W)
         # Header bottom line
         hp.line(3, 0, _HEADER_Y + _HEADER_H - 1, SCREEN_W,
                 _HEADER_Y + _HEADER_H - 1, colors['light_gray'])
@@ -271,7 +308,7 @@ def _draw_browser(equations, selected, scroll, scroll_only=False):
         n_total = len(equations)
 
     # --- Rows (always drawn) ---
-    max_text_w = _COL2_X - 16
+    max_text_w = _CAT_X - 16
     for i in range(_MAX_VISIBLE):
         vi = scroll + i
         if vi >= total:
@@ -283,8 +320,19 @@ def _draw_browser(equations, selected, scroll, scroll_only=False):
         starred = entry[0]
         eq = entry[1]
         alias = entry[2] if len(entry) > 2 else ''
-        ts = entry[3] if len(entry) > 3 else ''
-        label = alias if alias else eq
+        cat = _detect_cat(alias)
+        # Strip category prefix from display label
+        if cat and alias:
+            for prefix, _t, _c, _s in _CATEGORIES:
+                if alias.startswith(prefix):
+                    label = alias[len(prefix):].lstrip()
+                    break
+            else:
+                label = alias
+        else:
+            label = alias if alias else eq
+        if not label:
+            label = eq
 
         if vi == selected:
             hp.fillrect(3, 2, y, SCREEN_W - 4, _ITEM_H - 2,
@@ -292,9 +340,13 @@ def _draw_browser(equations, selected, scroll, scroll_only=False):
             if starred:
                 _textout(3, 4, y + 2, '*', FONT_MD, colors['star'], 12)
             _textout(3, 14, y + 2, label, FONT_MD, colors['sel_text'], max_text_w)
-            if ts:
-                _textout(3, _DATE_X, y + 4, ts, FONT_SM,
-                         colors['sel_date'], 82)
+            if cat:
+                tag, ckey, sym = cat
+                cc = colors[ckey]
+                hp.fillrect(3, _CAT_X, y + 2, _CAT_W, _ITEM_H - 5,
+                            cc, cc)
+                _textout(3, _CAT_X + 2, y + 3, tag, FONT_SM,
+                         0xFFFFFF, _CAT_W - 2)
         else:
             if i % 2 == 1:
                 hp.fillrect(3, 2, y, SCREEN_W - 4, _ITEM_H - 2,
@@ -302,9 +354,13 @@ def _draw_browser(equations, selected, scroll, scroll_only=False):
             if starred:
                 _textout(3, 4, y + 2, '*', FONT_MD, colors['star'], 12)
             _textout(3, 14, y + 2, label, FONT_MD, colors['text'], max_text_w)
-            if ts:
-                _textout(3, _DATE_X, y + 4, ts, FONT_SM,
-                         colors['gray'], 82)
+            if cat:
+                tag, ckey, sym = cat
+                cc = colors[ckey]
+                hp.fillrect(3, _CAT_X, y + 2, _CAT_W, _ITEM_H - 5,
+                            cc, cc)
+                _textout(3, _CAT_X + 2, y + 3, tag, FONT_SM,
+                         0xFFFFFF, _CAT_W - 2)
 
     # Separator line above footer
     hp.line(3, 5, _FOOTER_Y - 3, SCREEN_W - 5, _FOOTER_Y - 3,
@@ -412,7 +468,37 @@ def show_result(eq_str, alias=''):
 
     y = 0
     if alias:
-        _textout(2, 10, y, alias, FONT_MD, colors['accent'], SCREEN_W - 20)
+        # Split alias into base name and category
+        base_name = alias
+        cat_prefix = ''
+        cat_ckey = ''
+        for prefix, tag, ckey, sym in _CATEGORIES:
+            if alias.startswith(prefix + ' '):
+                cat_prefix = prefix
+                cat_ckey = ckey
+                base_name = alias[len(prefix) + 1:]
+                break
+            elif alias == prefix:
+                cat_prefix = prefix
+                cat_ckey = ckey
+                base_name = ''
+                break
+        # Draw base name on the left
+        if base_name:
+            _textout(2, 10, y, base_name, FONT_MD,
+                     colors['accent'], SCREEN_W - 20)
+        # Draw category badge on the right
+        if cat_prefix and cat_ckey:
+            cw = _text_width(cat_prefix, FONT_SM)
+            pad = 6
+            bw = cw + pad * 2
+            bx = SCREEN_W - bw - 10
+            by = y + 1
+            bh = 13
+            cc = colors[cat_ckey]
+            hp.fillrect(2, bx, by, bw, bh, cc, cc)
+            _textout(2, bx + pad, by + 1, cat_prefix,
+                     FONT_SM, 0xFFFFFF, cw + 2)
         y += 16
     y = draw_balanced_equation(result, y)
     y = draw_element_table(result, y)
@@ -647,6 +733,38 @@ def _input_alias(current=''):
     return result
 
 
+def _input_category(alias):
+    """Show category picker and prepend chosen prefix to alias.
+
+    Detects existing category prefix, strips it, then prepends the
+    new selection.  Returns updated alias string.
+    """
+    # Detect current category
+    cur_idx = -1
+    base = alias
+    for i, (prefix, tag, ckey, sym) in enumerate(_CATEGORIES):
+        if alias.startswith(prefix):
+            cur_idx = i
+            base = alias[len(prefix):].lstrip()
+            break
+
+    # Build picker: categories + None
+    names = ['None'] + list(_CAT_NAMES)
+    f_colors = [0] + [colors[c[2]] for c in _CATEGORIES]
+
+    fc = popup_menu(names, anchor_x=0, item_colors=f_colors)
+    if fc < 0:
+        return alias  # cancelled
+    if fc == 0:
+        # None — return base alias without prefix
+        return base if base else alias
+    # Category chosen (fc-1 maps to _CATEGORIES index)
+    prefix = _CAT_NAMES[fc - 1]
+    if base:
+        return prefix + ' ' + base
+    return prefix
+
+
 def do_molar():
     """Molar mass flow: input formula -> compute -> display."""
     fm = input_formula()
@@ -654,20 +772,25 @@ def do_molar():
         _show_molar(fm)
 
 
-_EDIT_SUBMENU_BASE = ['Add', 'Edit', 'Delete', 'Filter']
+# Category names for filter picker
+_CAT_NAMES = [c[0] for c in _CATEGORIES]
 
 
 def _do_edit_menu(equations, selected, scroll):
     """Show Add / Edit / Delete / Filter submenu."""
     global _filter, _view_dirty
-    items = list(_EDIT_SUBMENU_BASE)
+    items = ['Add', 'Edit', 'Delete', 'Filter']
     if _filter:
         items.append('Clear Filter')
     choice = popup_menu(items, anchor_x=0)
     if choice == 0:
-        eq = input_equation()
+        cat_clrs = [colors[c[2]] for c in _CATEGORIES]
+        eq, cat = input_equation(
+            cat_names=_CAT_NAMES, cat_colors=cat_clrs)
         if eq:
             alias = _input_alias()
+            if cat:
+                alias = cat + ' ' + alias if alias else cat
             equations = storage.add(eq, alias, _get_timestamp())
             selected = 0
             scroll = 0
@@ -679,9 +802,26 @@ def _do_edit_menu(equations, selected, scroll):
             entry = equations[ri]
             old_eq = entry[1]
             old_alias = entry[2] if len(entry) > 2 else ''
-            new_eq = input_equation(old_eq)
+            # Strip category prefix from alias for editing
+            old_cat = ''
+            old_base = old_alias
+            for prefix in _CAT_NAMES:
+                if old_alias.startswith(prefix + ' '):
+                    old_cat = prefix
+                    old_base = old_alias[len(prefix) + 1:]
+                    break
+                elif old_alias == prefix:
+                    old_cat = prefix
+                    old_base = ''
+                    break
+            cat_clrs = [colors[c[2]] for c in _CATEGORIES]
+            new_eq, new_cat = input_equation(
+                old_eq, old_cat, _CAT_NAMES, cat_clrs)
             if new_eq:
-                new_alias = _input_alias(old_alias)
+                new_alias = _input_alias(old_base)
+                if new_cat:
+                    new_alias = (new_cat + ' ' + new_alias
+                                 if new_alias else new_cat)
                 equations = storage.update(
                     ri, new_eq, new_alias, _get_timestamp())
     elif choice == 2:
@@ -691,10 +831,18 @@ def _do_edit_menu(equations, selected, scroll):
                 selected = max(0, len(equations) - 1)
             scroll = _ensure_visible(selected, scroll)
     elif choice == 3:
-        # Set / update filter
-        new_f = edit_text('Filter', _filter)
-        if new_f is not None:
-            _filter = new_f.strip()
+        # Filter — pick category, starred, or type custom text
+        f_items = ['\u2605 Starred'] + list(_CAT_NAMES) + ['Custom...']
+        f_colors = [colors['star']] + [colors[c[2]] for c in _CATEGORIES] + [0]
+        fc = popup_menu(f_items, anchor_x=0, item_colors=f_colors)
+        if fc == 0:
+            _filter = _STAR_FILTER
+        elif 1 <= fc <= len(_CAT_NAMES):
+            _filter = _CAT_NAMES[fc - 1]
+        elif fc == len(_CAT_NAMES) + 1:
+            new_f = edit_text('Filter', _filter)
+            if new_f is not None:
+                _filter = new_f.strip()
         selected = 0
         scroll = 0
     elif choice == 4:

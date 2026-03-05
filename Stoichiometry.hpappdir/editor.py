@@ -9,6 +9,8 @@ import hpprime as hp
 from constants import (SCREEN_W, SCREEN_H, MENU_Y, GR_AFF,
     FONT_SM, FONT_MD, FONT_TITLE)
 from theme import colors
+from icons import (ICON_LEFT, ICON_RIGHT, ICON_DEL, ICON_CLR,
+    ICON_ESC, ICON_CHECK, ICON_CASE, ICON_W, ICON_H)
 
 
 # --- PPL helpers ---
@@ -124,16 +126,52 @@ def _draw_menu_bar(labels):
     hp.fillrect(GR_AFF, 0, MENU_Y, SCREEN_W, 20,
                 colors['menu_bg'], colors['menu_bg'])
     bw = SCREEN_W // 6
+    fg = colors['menu_fg']
+    hi = colors.get('menu_hi', colors['menu_bg'])
+    sep = colors['menu_sep']
     for i in range(6):
         x = i * bw
-        if labels[i]:
-            tw = _tw(labels[i], FONT_SM)
-            tx = x + (bw - tw) // 2
-            _tout(GR_AFF, tx, MENU_Y + 5, labels[i],
-                  FONT_SM, colors['menu_fg'], bw)
+        hp.line(GR_AFF, x + 1, MENU_Y, x + bw - 2, MENU_Y, hi)
         if i > 0:
-            hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1,
-                    colors['menu_sep'])
+            hp.line(GR_AFF, x, MENU_Y, x, SCREEN_H - 1, sep)
+        item = labels[i]
+        if not item:
+            continue
+        if type(item) is tuple:
+            text, icon = item[0], item[1]
+        else:
+            text, icon = item, None
+        if icon and text:
+            tw_val = _tw(text, FONT_SM)
+            gap = 3
+            total = ICON_W + gap + tw_val
+            ix = x + (bw - total) // 2
+            iy = MENU_Y + (20 - ICON_H) // 2
+            _draw_icon(ix, iy, icon, fg)
+            _tout(GR_AFF, ix + ICON_W + gap, MENU_Y + 5,
+                  text, FONT_SM, fg, bw)
+        elif icon:
+            ix = x + (bw - ICON_W) // 2
+            iy = MENU_Y + (20 - ICON_H) // 2
+            _draw_icon(ix, iy, icon, fg)
+        else:
+            tw_val = _tw(text, FONT_SM)
+            tx = x + (bw - tw_val) // 2
+            _tout(GR_AFF, tx, MENU_Y + 5, text,
+                  FONT_SM, fg, bw)
+
+
+def _draw_icon(x, y, icon, color):
+    _pixon = hp.pixon
+    for row in range(ICON_H):
+        bits = icon[row]
+        if bits == 0:
+            continue
+        mask = 1 << (ICON_W - 1)
+        for col in range(ICON_W):
+            if bits & mask:
+                _pixon(GR_AFF, x + col, y + row, color)
+            mask >>= 1
 
 
 def _menu_hit(tx, ty):
@@ -223,6 +261,34 @@ def _num_hit(tx, ty):
     return None
 
 
+# --- Category button in PT gap (rows 1-2, cols 2-11) ---
+_CB_X = _PX + 2 * _CW + 2    # left edge
+_CB_Y = _PY + _CH + 2         # top edge
+_CB_W = 10 * _CW - 4          # width
+_CB_H = 2 * _CH - 4           # height
+
+
+def _draw_cat_btn(cat_name, cat_color):
+    """Draw category button in the periodic table gap area."""
+    if cat_color:
+        hp.fillrect(GR_AFF, _CB_X, _CB_Y, _CB_W, _CB_H,
+                    cat_color, cat_color)
+        _tout(GR_AFF, _CB_X + 4, _CB_Y + 8, cat_name,
+              FONT_MD, 0xFFFFFF, _CB_W - 8)
+    else:
+        hp.fillrect(GR_AFF, _CB_X, _CB_Y, _CB_W, _CB_H,
+                    colors['gray'], colors['input_bg'])
+        label = cat_name if cat_name else 'Category'
+        _tout(GR_AFF, _CB_X + 4, _CB_Y + 8, label,
+              FONT_MD, colors['gray'], _CB_W - 8)
+
+
+def _cat_btn_hit(tx, ty):
+    """Check if touch is inside the category button."""
+    return (_CB_X <= tx < _CB_X + _CB_W and
+            _CB_Y <= ty < _CB_Y + _CB_H)
+
+
 # Physical key -> digit/symbol (normal mode)
 _NK = {
     47: '0', 42: '1', 43: '2', 44: '3', 37: '4',
@@ -236,21 +302,38 @@ _SK = {48: '='}   # shift mode
 # Equation Editor (Periodic Table)
 # =============================================
 
-_EQ_MENU = ['<', '>', 'Del', 'Clr', 'Cncl', 'OK']
+_EQ_MENU = [('', ICON_LEFT), ('', ICON_RIGHT), ('Del', ICON_DEL),
+            ('Clr', ICON_CLR), ('Esc', ICON_ESC), ('OK', ICON_CHECK)]
 
 
-def edit_equation(title='Equation', initial=''):
+def edit_equation(title='Equation', initial='', category='',
+                  cat_names=None, cat_colors=None):
     """Equation editor with periodic table soft keyboard.
 
-    Returns edited string, or None if cancelled.
+    category:   current category name (or '').
+    cat_names:  list of category name strings (e.g. ['Combustion', ...]).
+    cat_colors: list of 0xRRGGBB ints matching cat_names (for button bg).
+    Returns (text, category) tuple, or None if cancelled.
     """
     text = initial if initial else ''
     cursor = len(text)
+    cur_cat = category if category else ''
+
+    def _cat_color():
+        if cur_cat and cat_names and cat_colors:
+            try:
+                idx = cat_names.index(cur_cat)
+                return cat_colors[idx]
+            except ValueError:
+                pass
+        return 0
 
     hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, colors['bg'], colors['bg'])
     _draw_title(title)
     _draw_field(text, cursor)
     _draw_pt()
+    if cat_names:
+        _draw_cat_btn(cur_cat, _cat_color())
     _draw_sym_row()
     _draw_num_row()
     _draw_menu_bar(_EQ_MENU)
@@ -277,7 +360,7 @@ def edit_equation(title='Equation', initial=''):
                 if bit == 4:    # ESC
                     _drain(); return None
                 if bit == 30:   # Enter
-                    _drain(); return text
+                    _drain(); return (text, cur_cat)
                 if bit == 19:   # Backspace
                     if cursor > 0:
                         text = text[:cursor-1] + text[cursor:]
@@ -318,6 +401,29 @@ def edit_equation(title='Equation', initial=''):
                 _drain()
                 continue
 
+            # Category button tap
+            if cat_names and _cat_btn_hit(tx, ty):
+                from ui import popup_menu
+                names = ['None'] + list(cat_names)
+                pc = [0] + list(cat_colors) if cat_colors else None
+                fc = popup_menu(names, anchor_x=0, item_colors=pc)
+                if fc == 0:
+                    cur_cat = ''
+                elif 1 <= fc <= len(cat_names):
+                    cur_cat = cat_names[fc - 1]
+                # Redraw full editor after popup
+                hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H,
+                            colors['bg'], colors['bg'])
+                _draw_title(title)
+                _draw_field(text, cursor)
+                _draw_pt()
+                _draw_cat_btn(cur_cat, _cat_color())
+                _draw_sym_row()
+                _draw_num_row()
+                _draw_menu_bar(_EQ_MENU)
+                _drain()
+                continue
+
             ch = _sym_hit(tx, ty)
             if ch:
                 text = text[:cursor] + ch + text[cursor:]
@@ -355,7 +461,7 @@ def edit_equation(title='Equation', initial=''):
             elif btn == 4:   # Cancel
                 _drain(); return None
             elif btn == 5:   # OK
-                _drain(); return text
+                _drain(); return (text, cur_cat)
             _drain()
 
 
@@ -363,7 +469,8 @@ def edit_equation(title='Equation', initial=''):
 # Text Editor (simple keyboard for aliases)
 # =============================================
 
-_TXT_MENU = ['<', '>', 'Del', 'Aa', 'Cncl', 'OK']
+_TXT_MENU = [('', ICON_LEFT), ('', ICON_RIGHT), ('Del', ICON_DEL),
+             ('Aa', ICON_CASE), ('Esc', ICON_ESC), ('OK', ICON_CHECK)]
 
 _KB_U = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ. -_'
 _KB_L = 'abcdefghijklmnopqrstuvwxyz. -_'
