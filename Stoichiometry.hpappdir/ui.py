@@ -9,6 +9,7 @@ from constants import (SCREEN_W, SCREEN_H, MENU_Y, MENU_H,
     GR_AFF, FONT_SM, FONT_MD, FONT_LG, FONT_XL, FONT_TITLE,
     APP_NAME, APP_VERSION)
 from theme import colors
+from icons import ICON_W, ICON_H, ICON_CHECK
 
 
 # Target GROB for drawing (0=screen, 2=off-screen buffer)
@@ -58,10 +59,27 @@ def draw_title(text):
     _textout(GR_AFF, 8, 4, text, FONT_TITLE, colors['title_fg'], SCREEN_W)
 
 
+def _draw_icon(x, y, icon, color):
+    """Render a 1-bit bitmap icon at (x, y) using pixon calls."""
+    _pixon = hp.pixon
+    for row in range(ICON_H):
+        bits = icon[row]
+        if bits == 0:
+            continue
+        mask = 1 << (ICON_W - 1)
+        for col in range(ICON_W):
+            if bits & mask:
+                _pixon(GR_AFF, x + col, y + row, color)
+            mask >>= 1
+
+
 def draw_menu(labels):
     """Draw 6-button soft menu bar at bottom (native HP Prime style).
 
-    labels: list of up to 6 strings.
+    labels: list of up to 6 items.  Each item is either:
+      - a string          "Edit"         → text only
+      - a tuple           ("Edit", ICON) → icon + text
+      - a tuple           ("", ICON)     → icon only (centered)
     """
     btn_w = SCREEN_W // 6
     bg = colors['menu_bg']
@@ -78,10 +96,36 @@ def draw_menu(labels):
         # Separator between buttons
         if i > 0:
             hp.line(GR_AFF, x, y0, x, y1, sep)
-        if labels[i]:
-            tw = _text_width(labels[i], FONT_SM)
+
+        item = labels[i]
+        if not item:
+            continue
+
+        if type(item) is tuple:
+            text, icon = item[0], item[1]
+        else:
+            text, icon = item, None
+
+        if icon and text:
+            # Icon + text: measure combined width, center them
+            tw = _text_width(text, FONT_SM)
+            gap = 3
+            total_w = ICON_W + gap + tw
+            ix = x + (btn_w - total_w) // 2
+            iy = y0 + (MENU_H - ICON_H) // 2
+            _draw_icon(ix, iy, icon, fg)
+            _textout(GR_AFF, ix + ICON_W + gap, y0 + 5,
+                     text, FONT_SM, fg, btn_w)
+        elif icon:
+            # Icon only: center it
+            ix = x + (btn_w - ICON_W) // 2
+            iy = y0 + (MENU_H - ICON_H) // 2
+            _draw_icon(ix, iy, icon, fg)
+        else:
+            # Text only
+            tw = _text_width(text, FONT_SM)
             tx = x + (btn_w - tw) // 2
-            _textout(GR_AFF, tx, y0 + 5, labels[i], FONT_SM, fg, btn_w)
+            _textout(GR_AFF, tx, y0 + 5, text, FONT_SM, fg, btn_w)
 
 
 def get_menu_tap(x, y):
@@ -172,7 +216,7 @@ def show_message(title, lines, wait=True):
         y += 16
 
     if wait:
-        draw_menu(["", "", "", "", "", "\u2713OK"])
+        draw_menu(["", "", "", "", "", ("OK", ICON_CHECK)])
         _wait_for_input()
 
 
