@@ -15,6 +15,8 @@ from keycodes import (KEY_ESC, KEY_UP, KEY_DOWN,
 
 import ppl_guard
 from input_helpers import get_key, mouse_clear, get_touch, get_menu_tap
+from icons import (ICON_EDIT, ICON_STAR, ICON_MOL, ICON_THEME,
+    ICON_BACK, ICON_NEW, ICON_CHECK, ICON_ABOUT, ICON_PCT, ICON_EXIT)
 
 from ui import (clear_screen, draw_title, draw_menu,
     set_draw_target,
@@ -107,7 +109,8 @@ _sort_dir = 1
 _view = []  # maps view position -> storage index
 _filter = ''  # substring filter; '' = no filter
 
-MAIN_MENU = ["\u270eEdit", "\u2605Star", "Mol", "About", "\u25d0", "Exit"]
+MAIN_MENU = [("Edit", ICON_EDIT), ("Star", ICON_STAR), ("Mol", ICON_MOL),
+             ("About", ICON_ABOUT), ("", ICON_THEME), ("Exit", ICON_EXIT)]
 
 
 def _get_timestamp():
@@ -396,9 +399,9 @@ def show_result(eq_str, alias=''):
 
     max_scroll = max(0, total_h - _VIEW_H)
     scroll_y = 0
-    menu = ["+New", "Mol", "", "", "", "\u25c0Back"]
+    menu = [("New", ICON_NEW), ("Mol", ICON_MOL), "", "", "", ("Back", ICON_BACK)]
     if not is_saved:
-        menu[4] = "\u2713Save"
+        menu[4] = ("Save", ICON_CHECK)
 
     _blit_result(scroll_y, total_h, max_scroll, menu)
     sr_down = False
@@ -456,7 +459,7 @@ def _do_molar_for(eq_str):
     # Graphical compound picker
     sel = 0
     total = len(all_compounds)
-    pick_menu = ["", "", "", "", "", "\u25c0Back"]
+    pick_menu = ["", "", "", "", "", ("Back", ICON_BACK)]
     _PICK_Y0 = 32
     _PICK_H = 22
     _PICK_MAX = (MENU_Y - _PICK_Y0) // _PICK_H
@@ -543,7 +546,7 @@ def _show_molar(formula_str):
     draw_title("Molar Mass")
     y = draw_molar_result(result, 30)
 
-    draw_menu(["+New", "Mass%", "", "", "", "\u25c0Back"])
+    draw_menu([("New", ICON_NEW), ("Mass%", ICON_PCT), "", "", "", ("Back", ICON_BACK)])
     sm_down = False
     sm_tx = -1
     sm_ty = -1
@@ -584,7 +587,7 @@ def _show_mass_pct(formula_str):
     draw_title("Mass % - " + formula_str)
     y = draw_mass_percent(percents, 30)
 
-    draw_menu(["", "", "", "", "", "\u25c0Back"])
+    draw_menu(["", "", "", "", "", ("Back", ICON_BACK)])
     mp_down = False
     mp_tx = -1
     mp_ty = -1
