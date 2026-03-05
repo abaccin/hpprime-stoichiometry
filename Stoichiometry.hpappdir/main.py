@@ -686,6 +686,14 @@ def main():
     """Main application loop — banner + equation browser."""
     ppl_guard.init()
     theme.init()
+    try:
+        _main_loop()
+    except KeyboardInterrupt:
+        pass
+    ppl_guard.cleanup()
+
+
+def _main_loop():
     _load_banner()
     equations = storage.load()
     selected = 0
@@ -808,8 +816,6 @@ def main():
                         _draw_browser(equations, selected, scroll)
 
         gc.collect()
-
-    ppl_guard.cleanup()
 
 
 # Entry point
