@@ -8,9 +8,46 @@ Supports add, edit, delete, star/unstar, alias, timestamps.
 """
 
 _FILENAME = '.equations'
+_LIB_FILE = 'equations.lib'
+_VER_FILE = '.eqver'
+_LIB_VER = 4  # bump this to force re-init from equations.lib
 
-# Default starter equations: (alias, equation)
-_DEFAULTS = [
+
+def _load_lib_defaults():
+    """Read all equations from equations.lib as default list.
+
+    Lib format: Category|Name|Equation (one per line).
+    Returns list of (alias, equation) tuples.
+    The alias is reconstructed as 'Category Name'.
+    Reads line-by-line to conserve memory.
+    """
+    defaults = []
+    try:
+        with open(_LIB_FILE, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split('|')
+                if len(parts) == 3:
+                    cat = parts[0].strip()
+                    name = parts[1].strip()
+                    eq = parts[2].strip()
+                    alias = (cat + ' ' + name).strip()
+                    defaults.append((alias, eq))
+                elif len(parts) == 2:
+                    # Legacy 2-field: alias|equation
+                    defaults.append((parts[0].strip(),
+                                     parts[1].strip()))
+                else:
+                    defaults.append(('', line))
+    except:
+        pass
+    return defaults
+
+
+# Hardcoded fallback (used only if equations.lib is missing)
+_FALLBACK = [
     ('Rust', 'Fe + O2 = Fe2O3'),
     ('Combustion CH4', 'CH4 + O2 = CO2 + H2O'),
     ('', 'Al + HCl = AlCl3 + H2'),
@@ -21,25 +58,6 @@ _DEFAULTS = [
     ('Combustion C2H6', 'C2H6 + O2 = CO2 + H2O'),
     ('Iron reduction', 'Fe2O3 + CO = Fe + CO2'),
     ('Decomposition', 'H2O2 = H2O + O2'),
-    ('', 'Zn + HCl = ZnCl2 + H2'),
-    ('Combustion C3H8', 'C3H8 + O2 = CO2 + H2O'),
-    ('Precipitation', 'AgNO3 + NaCl = AgCl + NaNO3'),
-    ('', 'Mg + O2 = MgO'),
-    ('Calcium oxide', 'CaCO3 = CaO + CO2'),
-    ('Acid-base', 'NaOH + H2SO4 = Na2SO4 + H2O'),
-    ('', 'Cu + AgNO3 = Cu(NO3)2 + Ag'),
-    ('Glucose combustion', 'C6H12O6 + O2 = CO2 + H2O'),
-    ('', 'P + O2 = P2O5'),
-    ('', 'BaCl2 + Na2SO4 = BaSO4 + NaCl'),
-    ('', 'Fe + CuSO4 = FeSO4 + Cu'),
-    ('', 'KClO3 = KCl + O2'),
-    ('Thermite', 'Al + Fe2O3 = Al2O3 + Fe'),
-    ('Ethanol combustion', 'C2H5OH + O2 = CO2 + H2O'),
-    ('Catalytic oxidation', 'NH3 + O2 = NO + H2O'),
-    ('', 'Pb(NO3)2 + KI = PbI2 + KNO3'),
-    ('Complex redox', 'K2Cr2O7 + FeSO4 + H2SO4 = K2SO4 + Cr2(SO4)3 + Fe2(SO4)3 + H2O'),
-    ('Photosynthesis', 'CO2 + H2O = C6H12O6 + O2'),
-    ('Copper sulfate', 'Cu + H2SO4 = CuSO4 + SO2 + H2O'),
 ]
 
 
@@ -80,12 +98,48 @@ def _format_line(starred, equation, alias='', ts=''):
     return line
 
 
+def _get_ver():
+    """Read stored version number, or 0 if missing."""
+    try:
+        with open(_VER_FILE, 'r') as f:
+            return int(f.read().strip())
+    except:
+        return 0
+
+
+def _set_ver(v):
+    """Write version number."""
+    try:
+        with open(_VER_FILE, 'w') as f:
+            f.write(str(v))
+    except:
+        pass
+
+
+def _init_defaults():
+    """Build default equation list from equations.lib (or fallback).
+
+    Returns list of (starred, equation, alias, timestamp) tuples.
+    """
+    lib = _load_lib_defaults()
+    if lib:
+        defaults = [(False, eq, al, '') for al, eq in lib]
+    else:
+        defaults = [(False, eq, al, '') for al, eq in _FALLBACK]
+    save(defaults)
+    _set_ver(_LIB_VER)
+    return defaults
+
+
 def load():
     """Load equations from file.
 
-    Returns list of (starred, equation, alias) tuples.
-    Creates default list on first run.
+    Returns list of (starred, equation, alias, ts) tuples.
+    On first run or version upgrade, initializes from equations.lib.
     """
+    # Check if library version changed → re-init
+    if _get_ver() < _LIB_VER:
+        return _init_defaults()
     try:
         with open(_FILENAME, 'r') as f:
             lines = f.read().strip().split('\n')
@@ -96,10 +150,8 @@ def load():
                     result.append(_parse_line(l))
             return result
     except:
-        # First run — save defaults
-        defaults = [(False, eq, al, '') for al, eq in _DEFAULTS]
-        save(defaults)
-        return list(defaults)
+        # File missing — initialize
+        return _init_defaults()
 
 
 def save(equations):
