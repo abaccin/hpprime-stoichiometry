@@ -7,7 +7,7 @@ Main screen has banner + equation browser with CRUD + star.
 import gc
 import hpprime as hp
 import theme
-from constants import (GR_AFF, SCREEN_W, MENU_Y,
+from constants import (GR_AFF, SCREEN_W, SCREEN_H, MENU_Y,
     FONT_SM, FONT_MD, FONT_LG, FONT_TITLE)
 from theme import colors
 from keycodes import (KEY_ESC, KEY_UP, KEY_DOWN,
@@ -107,6 +107,7 @@ _DATE_X = 238    # date text start x
 _sort_col = 0
 _sort_dir = 1
 _view = []  # maps view position -> storage index
+_view_dirty = True  # True = _view needs recalculation
 _filter = ''  # substring filter; '' = no filter
 
 MAIN_MENU = [("Edit", ICON_EDIT), ("Star", ICON_STAR), ("Mol", ICON_MOL),
@@ -147,8 +148,10 @@ def _sort_key(item):
 
 
 def _sorted_indices(equations):
-    """Return list of original indices filtered and in sort order."""
-    global _view
+    """Return cached view list; only recalculate when _view_dirty."""
+    global _view, _view_dirty
+    if not _view_dirty and _view:
+        return _view
     items = list(enumerate(equations))
     if _filter:
         flt = _filter.lower()
@@ -165,6 +168,7 @@ def _sorted_indices(equations):
     except:
         pass
     _view = [i for i, _ in items]
+    _view_dirty = False
     return _view
 
 
@@ -182,12 +186,13 @@ def _header_tap(tx):
 
 def _toggle_sort(col):
     """Toggle sort on column. Same col toggles direction."""
-    global _sort_col, _sort_dir
+    global _sort_col, _sort_dir, _view_dirty
     if _sort_col == col:
         _sort_dir = -_sort_dir
     else:
         _sort_col = col
         _sort_dir = 1
+    _view_dirty = True
 
 
 def _real(sel):
@@ -197,64 +202,76 @@ def _real(sel):
     return sel
 
 
-def _draw_browser(equations, selected, scroll):
-    """Draw the banner + equation browser list (double-buffered)."""
-    # Force HP Prime to switch from Numeric View (terminal) to graphical display.
-    # Any direct G0 draw activates the graphical view; fillrect over the full
-    # screen also acts as the clear, so the terminal content disappears.
-    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, MENU_Y, colors['bg'], colors['bg'])
-    # Render to off-screen buffer G3, then BLIT to screen
-    hp.dimgrob(3, SCREEN_W, MENU_Y, colors['bg'])
+def _draw_browser(equations, selected, scroll, scroll_only=False):
+    """Draw the equation browser list (double-buffered).
 
-    # Banner on G3
-    if hp.grobw(1) > 0:
-        bw = hp.grobw(1)
-        bh = hp.grobh(1)
-        hp.eval('BLIT_P(G3,0,0,320,' + str(_BANNER_H)
-                + ',G1,0,0,' + str(bw) + ',' + str(bh) + ')')
+    scroll_only=True skips banner, header, menu — only redraws rows, footer,
+    scrollbar. Used during Up/Down scroll and scrollbar drag for speed.
+    """
+    if scroll_only and _view:
+        # Fast path: only redraw rows area on G3
+        # Clear rows + footer area only
+        rows_y = _ITEM_Y0
+        hp.fillrect(3, 0, rows_y, SCREEN_W, MENU_Y - rows_y,
+                    colors['bg'], colors['bg'])
+        view = _view  # use cached view
+        total = len(view)
+        n_total = len(equations)
     else:
-        hp.fillrect(3, 0, 0, SCREEN_W, _BANNER_H,
-                    colors['banner_bg'], colors['banner_bg'])
-        _textout(3, 10, 14, "Balance Formulas",
-                 FONT_TITLE, colors['title_fg'], SCREEN_W)
-    # Overlay title text on G3
-    _draw_centered(3, 14, "Chemical Equation Balancer",
-                   FONT_LG, colors['banner_text1'])
-    _draw_centered(3, 30, "Molar Mass Calculator",
-                   FONT_MD, colors['banner_text2'])
+        # Full redraw — banner, header, rows, footer, menu
+        hp.fillrect(3, 0, 0, SCREEN_W, MENU_Y, colors['bg'], colors['bg'])
 
-    if not equations:
-        _textout(3, 60, 80, "No equations yet", FONT_LG,
-                 colors['gray'], SCREEN_W)
-        _textout(3, 50, 100, "Press Add to create one", FONT_MD,
-                 colors['gray'], SCREEN_W)
-        hp.eval('BLIT_P(G0,0,0,320,' + str(MENU_Y)
-                + ',G3,0,0,320,' + str(MENU_Y) + ')')
-        draw_menu(MAIN_MENU)
-        return
+        # Banner on G3
+        if hp.grobw(1) > 0:
+            bw = hp.grobw(1)
+            bh = hp.grobh(1)
+            hp.eval('BLIT_P(G3,0,0,320,' + str(_BANNER_H)
+                    + ',G1,0,0,' + str(bw) + ',' + str(bh) + ')')
+        else:
+            hp.fillrect(3, 0, 0, SCREEN_W, _BANNER_H,
+                        colors['banner_bg'], colors['banner_bg'])
+            _textout(3, 10, 14, "Balance Formulas",
+                     FONT_TITLE, colors['title_fg'], SCREEN_W)
+        # Overlay title text on G3
+        _draw_centered(3, 14, "Chemical Equation Balancer",
+                       FONT_LG, colors['banner_text1'])
+        _draw_centered(3, 30, "Molar Mass Calculator",
+                       FONT_MD, colors['banner_text2'])
 
-    # Column header
-    hp.fillrect(3, 0, _HEADER_Y, SCREEN_W, _HEADER_H,
-                colors['header_bg'], colors['header_bg'])
-    arrow = ' v' if _sort_dir == 1 else ' ^'
-    star_lbl = (arrow.strip()) if _sort_col in (0, 1) else '*'
-    star_col = colors['accent'] if _sort_col in (0, 1) else colors['star']
-    filter_tag = ' [F]' if _filter else ''
-    eq_lbl = 'Equation' + filter_tag + (arrow if _sort_col == 2 else '')
-    eq_col = colors['filter_active'] if _filter else (colors['accent'] if _sort_col == 2 else colors['gray'])
-    dt_lbl = 'Modified' + (arrow if _sort_col == 3 else '')
-    dt_col = colors['accent'] if _sort_col == 3 else colors['gray']
-    _textout(3, 3, _HEADER_Y + 2, star_lbl, FONT_SM, star_col, 10)
-    _textout(3, 14, _HEADER_Y + 2, eq_lbl, FONT_SM, eq_col, 200)
-    _textout(3, _DATE_X, _HEADER_Y + 2, dt_lbl, FONT_SM, dt_col, 82)
-    # Header bottom line
-    hp.line(3, 0, _HEADER_Y + _HEADER_H - 1, SCREEN_W,
-            _HEADER_Y + _HEADER_H - 1, colors['light_gray'])
+        if not equations:
+            _textout(3, 60, 80, "No equations yet", FONT_LG,
+                     colors['gray'], SCREEN_W)
+            _textout(3, 50, 100, "Press Add to create one", FONT_MD,
+                     colors['gray'], SCREEN_W)
+            hp.eval('BLIT_P(G0,0,0,320,' + str(MENU_Y)
+                    + ',G3,0,0,320,' + str(MENU_Y) + ')')
+            draw_menu(MAIN_MENU)
+            return
 
+        # Column header
+        hp.fillrect(3, 0, _HEADER_Y, SCREEN_W, _HEADER_H,
+                    colors['header_bg'], colors['header_bg'])
+        arrow = ' v' if _sort_dir == 1 else ' ^'
+        star_lbl = (arrow.strip()) if _sort_col in (0, 1) else '*'
+        star_col = colors['accent'] if _sort_col in (0, 1) else colors['star']
+        filter_tag = ' [F]' if _filter else ''
+        eq_lbl = 'Equation' + filter_tag + (arrow if _sort_col == 2 else '')
+        eq_col = colors['filter_active'] if _filter else (colors['accent'] if _sort_col == 2 else colors['gray'])
+        dt_lbl = 'Modified' + (arrow if _sort_col == 3 else '')
+        dt_col = colors['accent'] if _sort_col == 3 else colors['gray']
+        _textout(3, 3, _HEADER_Y + 2, star_lbl, FONT_SM, star_col, 10)
+        _textout(3, 14, _HEADER_Y + 2, eq_lbl, FONT_SM, eq_col, 200)
+        _textout(3, _DATE_X, _HEADER_Y + 2, dt_lbl, FONT_SM, dt_col, 82)
+        # Header bottom line
+        hp.line(3, 0, _HEADER_Y + _HEADER_H - 1, SCREEN_W,
+                _HEADER_Y + _HEADER_H - 1, colors['light_gray'])
+
+        view = _sorted_indices(equations)
+        total = len(view)
+        n_total = len(equations)
+
+    # --- Rows (always drawn) ---
     max_text_w = _COL2_X - 16
-    view = _sorted_indices(equations)
-    total = len(view)        # filtered count (drives loop + scrollbar)
-    n_total = len(equations) # full count (for footer)
     for i in range(_MAX_VISIBLE):
         vi = scroll + i
         if vi >= total:
@@ -315,10 +332,16 @@ def _draw_browser(equations, selected, scroll):
         hp.fillrect(3, sb_x, thumb_y, 4, thumb_h,
                     colors['gray'], colors['gray'])
 
-    # BLIT all at once to screen — no flicker
-    hp.eval('BLIT_P(G0,0,0,320,' + str(MENU_Y)
-            + ',G3,0,0,320,' + str(MENU_Y) + ')')
-    draw_menu(MAIN_MENU)
+    if scroll_only:
+        # Fast path: only BLIT the rows area
+        y0 = _ITEM_Y0
+        hp.eval('BLIT_P(G0,0,' + str(y0) + ',320,' + str(MENU_Y)
+                + ',G3,0,' + str(y0) + ',320,' + str(MENU_Y) + ')')
+    else:
+        # Full BLIT + menu redraw
+        hp.eval('BLIT_P(G0,0,0,320,' + str(MENU_Y)
+                + ',G3,0,0,320,' + str(MENU_Y) + ')')
+        draw_menu(MAIN_MENU)
 
 
 def _ensure_visible(selected, scroll):
@@ -636,7 +659,7 @@ _EDIT_SUBMENU_BASE = ['Add', 'Edit', 'Delete', 'Filter']
 
 def _do_edit_menu(equations, selected, scroll):
     """Show Add / Edit / Delete / Filter submenu."""
-    global _filter
+    global _filter, _view_dirty
     items = list(_EDIT_SUBMENU_BASE)
     if _filter:
         items.append('Clear Filter')
@@ -679,6 +702,7 @@ def _do_edit_menu(equations, selected, scroll):
         _filter = ''
         selected = 0
         scroll = 0
+    _view_dirty = True
     return equations, selected, scroll
 
 
@@ -695,7 +719,13 @@ def main():
 
 def _main_loop():
     _load_banner()
+    # Allocate G3 once for double-buffered browser drawing
+    hp.dimgrob(3, SCREEN_W, MENU_Y, 0)
+    # Force graphical view (escape Numeric View on first launch)
+    hp.fillrect(GR_AFF, 0, 0, SCREEN_W, SCREEN_H, colors['bg'], colors['bg'])
     equations = storage.load()
+    global _view_dirty
+    _view_dirty = True
     selected = 0
     scroll = 0
     touch_down = False
@@ -714,13 +744,13 @@ def _main_loop():
             if selected > 0:
                 selected -= 1
                 scroll = _ensure_visible(selected, scroll)
-                _draw_browser(equations, selected, scroll)
+                _draw_browser(equations, selected, scroll, scroll_only=True)
 
         elif key == KEY_DOWN:
             if _view and selected < len(_view) - 1:
                 selected += 1
                 scroll = _ensure_visible(selected, scroll)
-                _draw_browser(equations, selected, scroll)
+                _draw_browser(equations, selected, scroll, scroll_only=True)
 
         elif key == KEY_ENTER:
             if equations:
@@ -730,6 +760,7 @@ def _main_loop():
                 show_result(entry[1], al)
                 mouse_clear()
                 equations = storage.load()
+                _view_dirty = True
                 if selected >= len(_view):
                     selected = max(0, len(_view) - 1)
                 scroll = _ensure_visible(selected, scroll)
@@ -739,6 +770,7 @@ def _main_loop():
             # Quick delete
             if equations:
                 equations = storage.delete(_real(selected))
+                _view_dirty = True
                 if selected >= len(_view):
                     selected = max(0, len(_view) - 1)
                 scroll = _ensure_visible(selected, scroll)
@@ -757,10 +789,12 @@ def _main_loop():
                 sb_area_h = _FOOTER_Y - 3 - _ITEM_Y0
                 ratio = (ty - _ITEM_Y0) / max(1, sb_area_h)
                 max_scroll = len(_view) - _MAX_VISIBLE
-                scroll = int(ratio * max_scroll)
-                scroll = max(0, min(scroll, max_scroll))
-                selected = max(scroll, min(selected, scroll + _MAX_VISIBLE - 1))
-                _draw_browser(equations, selected, scroll)
+                new_scroll = int(ratio * max_scroll)
+                new_scroll = max(0, min(new_scroll, max_scroll))
+                if new_scroll != scroll:
+                    scroll = new_scroll
+                    selected = max(scroll, min(selected, scroll + _MAX_VISIBLE - 1))
+                    _draw_browser(equations, selected, scroll, scroll_only=True)
         elif touch_down:
             # Finger released — process tap at (tap_x, tap_y)
             touch_down = False
@@ -774,6 +808,7 @@ def _main_loop():
                 if equations:
                     equations = storage.toggle_star(
                         _real(selected), _get_timestamp())
+                    _view_dirty = True
                 _draw_browser(equations, selected, scroll)
             elif btn == 2:
                 do_molar()
@@ -810,12 +845,15 @@ def _main_loop():
                         show_result(entry[1], al)
                         mouse_clear()
                         equations = storage.load()
+                        _view_dirty = True
                         if selected >= len(_view):
                             selected = max(0, len(_view) - 1)
                         scroll = _ensure_visible(selected, scroll)
                         _draw_browser(equations, selected, scroll)
 
-        gc.collect()
+        # Throttle GC — only run periodically, not every frame
+        if key >= 0 or touch_down:
+            gc.collect()
 
 
 # Entry point
