@@ -17,7 +17,8 @@
 
 ---
 ## Demo
-https://github.com/user-attachments/assets/8834f168-dbae-47d4-8596-16ad56265e7f
+https://github.com/user-attachments/assets/a96ef938-63fc-45fa-b1c1-9f63b23b36ba
+
 
 ## Screens
 
