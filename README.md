@@ -12,6 +12,7 @@
 - **Molar mass calculator** — enter any formula to get the total molar mass with per-element breakdown (element, count, atomic mass, subtotal).
 - **Mass percent composition** — visual bar-chart showing each element's contribution by mass.
 - **Colored equation display** — balanced equations render with coefficients in red, formulas in blue, and the arrow in gray.
+- **Reaction type predictor** — a neural network (18→24→16→7, ReLU + softmax) classifies balanced equations into one of 7 reaction types. A color-coded badge appears automatically on the result screen; tap **Type** for a full confidence breakdown across all categories.
 
 ### Equation Library
 - **273 built-in equations** across 7 reaction categories, ready to browse and use.
@@ -32,7 +33,7 @@ Equations can be tagged with a color-coded reaction type:
 | Redox | Purple | Oxidation-reduction reactions |
 | Decomposition | Red | Thermal decomposition, electrolysis |
 
-Category badges appear in the browser list and on the balance result screen.
+Category badges appear in the browser list and on the balance result screen. The neural network predictor uses these same categories.
 
 ### Equation Management
 - **Equation browser** — sortable, filterable list of saved equations.
@@ -51,7 +52,7 @@ Category badges appear in the browser list and on the balance result screen.
 
 ### UI & Theming
 - **Light / dark theme** — auto-detects system theme on launch; toggle with one tap. 50+ color tokens covering every UI element.
-- **Bitmap menu icons** — 16 custom 9×9 pixel icons for all menu actions (Edit, Star, Mol, Theme, Back, New, OK, About, %, Exit, Library, ←, →, Del, Clear, Aa).
+- **Bitmap menu icons** — 17 custom 9×9 pixel icons for all menu actions (Edit, Star, Mol, Theme, Back, New, OK, About, %, Exit, Library, ←, →, Del, Clear, Aa, Brain).
 - **Popup menus** — context-sensitive dropdowns with color-coded category dots, keyboard/touch navigation, and non-destructive overlay rendering.
 - **Scrollbar drag** — touch-drag scrollbar for fast navigation in all list views.
 - **Double-buffered rendering** — off-screen GROB buffers for smooth scrolling on result screens.
@@ -119,6 +120,7 @@ The physical keyboard handles navigation and common shortcuts.
 | ESC | Return to browser |
 | Tap **New** | Enter a new equation to balance |
 | Tap **Mol** | Pick a compound from the equation → open molar mass |
+| Tap **Type** | Show predicted reaction type with confidence scores for all 7 categories |
 | Tap **Save** | Save equation to browser (only shown if not already saved) |
 | Tap **Back** | Return to browser |
 
@@ -202,6 +204,16 @@ This is the same approach described in detail at:
 
 The HP Prime implementation uses the built-in `linalg` module in place of NumPy/SymPy, making it fully self-contained with no external dependencies.
 
+### Reaction Type Prediction
+
+A small neural network classifies balanced equations by reaction type:
+
+1. **Feature extraction** — 18 hand-crafted features are computed from the parsed equation (reactant/product counts, presence of O₂/H₂O/CO₂, metal and halogen indicators, acid/hydroxide detection, free element counts, etc.).
+2. **Inference** — a 3-layer fully connected network (18→24→16→7) with ReLU activations and softmax output runs entirely in MicroPython — no `linalg` dependency, just flat-array dot products.
+3. **Training** — performed offline with a NumPy-only script (`train_classifier.py`) on the 273 library equations. The exported weight file is 9.5 KB (~1011 parameters).
+
+Accuracy: 99.6% on training data, 9/10 on novel out-of-sample equations.
+
 ---
 
 ## Files
@@ -221,9 +233,13 @@ The HP Prime implementation uses the built-in `linalg` module in place of NumPy/
 | `constants.py` | Screen dimensions, fonts, GROB constants |
 | `keycodes.py` | HP Prime keyboard bitmask bit positions |
 | `theme.py` | Light / dark color palettes (50+ tokens, auto-detect + toggle) |
-| `icons.py` | 16 bitmap menu icons (9×9 pixel art) |
+| `icons.py` | 17 bitmap menu icons (9×9 pixel art) |
+| `nn.py` | Neural network inference engine (18→24→16→7, pure Python) |
+| `features.py` | 18-feature extractor for reaction type classification |
+| `reaction_nn.weights` | Pre-trained network weights (~1011 parameters, 9.5 KB) |
 | `input_helpers.py` | Keyboard edge-detect, touch helpers, DAS repeat |
 | `ppl_guard.py` | PPL environment save / restore on app entry / exit |
+| `train_classifier.py` | Offline training script (NumPy-only, runs on PC) |
 
 ---
 
