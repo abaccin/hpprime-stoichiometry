@@ -16,7 +16,8 @@ from keycodes import (KEY_ESC, KEY_UP, KEY_DOWN,
 import ppl_guard
 from input_helpers import get_key, mouse_clear, get_touch, get_menu_tap
 from icons import (ICON_EDIT, ICON_STAR, ICON_MOL, ICON_THEME,
-    ICON_BACK, ICON_NEW, ICON_CHECK, ICON_ABOUT, ICON_PCT, ICON_EXIT)
+    ICON_BACK, ICON_NEW, ICON_CHECK, ICON_ABOUT, ICON_PCT, ICON_EXIT,
+    ICON_BRAIN)
 
 from ui import (clear_screen, draw_title, draw_menu,
     set_draw_target,
@@ -29,6 +30,8 @@ from balancer import balance, verify_balance
 from parser import parse_equation
 from molar import molar_mass, mass_percent
 from editor import edit_equation, edit_text
+import nn
+import features as feat_mod
 
 
 # --- Banner constants ---
@@ -447,6 +450,75 @@ def _blit_result(scroll_y, total_h, max_scroll, menu):
     draw_menu(menu)
 
 
+def _predict_reaction(eq_str):
+    """Run reaction type prediction.  Returns (name, confidence, probs) or Nones."""
+    if not nn.is_loaded():
+        return None, 0.0, None
+    try:
+        lhs, rhs = parse_equation(eq_str)
+        fv = feat_mod.extract(lhs, rhs)
+        return nn.predict_category(fv)
+    except:
+        return None, 0.0, None
+
+
+def _draw_prediction_badge(gr, y, cat_name, confidence):
+    """Draw a prediction badge on GROB gr at y. Returns new y."""
+    # Separator
+    hp.line(gr, 5, y, SCREEN_W - 5, y, colors['light_gray'])
+    y += 6
+
+    # Find category color
+    ckey = 'cat_default'
+    for prefix, _tag, ck, _sym in _CATEGORIES:
+        if cat_name == prefix:
+            ckey = ck
+            break
+    cc = colors[ckey]
+
+    # "Predicted:" label
+    _textout(gr, 10, y, 'Predicted:', FONT_SM, colors['gray'], 80)
+
+    # Category badge
+    bx = 80
+    pct = str(int(confidence * 100)) + '%'
+    label = cat_name + ' ' + pct
+    tw = _text_width(label, FONT_MD)
+    pad = 6
+    bw = tw + pad * 2
+    bh = 15
+    hp.fillrect(gr, bx, y - 1, bw, bh, cc, cc)
+    _textout(gr, bx + pad, y, label, FONT_MD, 0xFFFFFF, tw + 2)
+    y += 20
+    return y
+
+
+def _show_confidence_popup(cat_name, probs):
+    """Show a popup with confidence bars for all categories."""
+    if probs is None:
+        return
+    # Build items sorted by probability (descending)
+    indexed = list(enumerate(probs))
+    indexed.sort(key=lambda x: -x[1])
+
+    items = []
+    item_colors = []
+    for idx, p in indexed:
+        name = feat_mod.CATEGORIES[idx]
+        pct = str(int(p * 100)) + '%'
+        label = name + '  ' + pct
+        items.append(label)
+        # Find color
+        ckey = 'cat_default'
+        for prefix, _tag, ck, _sym in _CATEGORIES:
+            if name == prefix:
+                ckey = ck
+                break
+        item_colors.append(colors[ckey])
+
+    popup_menu(items, anchor_x=53 * 2, item_colors=item_colors)
+
+
 def show_result(eq_str, alias=''):
     """Balance and display an equation, with Save option if new."""
     try:
@@ -460,9 +532,12 @@ def show_result(eq_str, alias=''):
 
     is_saved = storage.contains(eq_str)
 
+    # Run reaction type prediction
+    pred_name, pred_conf, pred_probs = _predict_reaction(eq_str)
+
     # Render content to off-screen GROB G2
     n_el = len(result['elements'])
-    buf_h = 200 + n_el * 14
+    buf_h = 240 + n_el * 14
     hp.dimgrob(2, SCREEN_W, buf_h, colors['bg'])
     set_draw_target(2)
 
@@ -502,6 +577,11 @@ def show_result(eq_str, alias=''):
         y += 16
     y = draw_balanced_equation(result, y)
     y = draw_element_table(result, y)
+
+    # Draw prediction badge if available
+    if pred_name:
+        y = _draw_prediction_badge(2, y, pred_name, pred_conf)
+
     total_h = y
 
     set_draw_target(GR_AFF)
@@ -509,6 +589,8 @@ def show_result(eq_str, alias=''):
     max_scroll = max(0, total_h - _VIEW_H)
     scroll_y = 0
     menu = [("New", ICON_NEW), ("Mol", ICON_MOL), "", "", "", ("Back", ICON_BACK)]
+    if pred_name:
+        menu[2] = ("Type", ICON_BRAIN)
     if not is_saved:
         menu[4] = ("Save", ICON_CHECK)
 
@@ -545,6 +627,9 @@ def show_result(eq_str, alias=''):
             elif btn == 1:
                 _do_molar_for(eq_str)
                 return
+            elif btn == 2 and pred_probs:
+                _show_confidence_popup(pred_name, pred_probs)
+                _blit_result(scroll_y, total_h, max_scroll, menu)
             elif btn == 4 and not is_saved:
                 storage.add(eq_str, ts=_get_timestamp())
                 return
@@ -858,6 +943,7 @@ def main():
     """Main application loop — banner + equation browser."""
     ppl_guard.init()
     theme.init()
+    nn.load()  # Load reaction type classifier weights (silent fail if missing)
     try:
         _main_loop()
     except KeyboardInterrupt:
